@@ -148,7 +148,6 @@ def process_extracted_text(text: str, filename: str, disease: str, start_time: f
     3. Recherche les paragraphes les plus pertinents (Top 5).
     4. Envoie ces 5 paragraphes au LLM (Qwen) pour extraire le JSON final.
     """
-    global conn, cur, biobert_model, biobert_tokenizer, qwen_model, qwen_tokenizer, device, is_vllm
     cur = None
     try:
         # --- NOUVEAUTÉ: VÉRIFICATION DU CACHE NER ---

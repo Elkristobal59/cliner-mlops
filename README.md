@@ -22,7 +22,7 @@ Pour garantir une rigueur scientifique totale (pas de *Data Leakage*), l'équipe
 
 1.  **`extract_full_chia.py` (La Collecte)** : Se connecte aux sources (Drive/HuggingFace), rassemble les PDF et les annotations BRAT, et génère la base de données brute consolidée (`chia_gold_standard_v2.json`).
 2.  **`split_dataset.py` (La Répartition)** : Sépare intelligemment la base brute. Il met de côté 5 études secrètes (Le *Holdout Set* dans un coffre-fort pour le jour J), puis coupe le reste en deux fichiers : `train_dataset.jsonl` (le cahier d'exercices) et `test_dataset.jsonl` (l'examen blanc).
-3.  **`finetune_qwen.py` (L'Entraînement)** : Le script de MLOps ! Il prend le modèle Qwen-0.5B brut, le fait réviser sur le `train_dataset.jsonl` via la méthode optimisée **QLoRA** (4-bit), et sauvegarde son "cerveau médical" dans le dossier `models/`.
+3.  **`finetune_qwen.py` (L'Entraînement)** : Le script de MLOps ! Il prend le modèle de pointe **`Qwen/Qwen2.5-7B-Instruct`** (gelé pour préserver ses capacités linguistiques), injecte les adaptateurs **LoRA** (QLoRA 4-bit, rank=16, alpha=32), l'entraîne sur le `train_dataset.jsonl` (annotations CHIA) en ~20 minutes sur GPU, et sauvegarde son adaptateur médical (~84 Mo) dans `models/` et sur AWS S3.
 4.  **`inference_qwen.py` (L'Évaluation)** : Le script d'examen. Il charge le modèle fine-tuné et le fait travailler à l'aveugle sur le `test_dataset.jsonl`. Il calcule ensuite mathématiquement le Score F1, la Précision et le Rappel pour le Benchmark officiel de la soutenance.
 
 ## 🚀 Démarrage Rapide
@@ -77,11 +77,11 @@ terraform apply
 
 ## 🛠️ Améliorations Futures
 
-### 1. Stratégie de Lutte contre le Drift (Dérive)
-Pour garantir la pérennité de notre modèle en production, nous avons prévu une stratégie de lutte contre le **Drift** (Dérive des données et du concept) :
-- **Data Drift** : Si les textes des protocoles cliniques (ClinicalTrials) changent de format ou de vocabulaire dans 2 ans, les performances du modèle vont baisser.
-- **Concept Drift** : De nouvelles maladies ou de nouveaux types de traitements (ex: thérapies géniques, Covid) peuvent apparaître, rendant le modèle obsolète.
-- **Notre Solution (Human-in-the-Loop)** : L'interface permet aux experts médicaux de signaler une erreur d'extraction. Ces corrections sont sauvegardées dans une base de données de "Feedback". Tous les 3 mois, un script MLOps utilisera ces nouvelles données corrigées pour déclencher un **Ré-entraînement Automatique (Fine-Tuning Continu)** du modèle Qwen, assurant ainsi sa résilience face au temps.
+### 1. Stratégie MLOps & Continuous Training Implémentée (`07_mlops_reentrainement/`)
+Pour garantir la pérennité et la conformité RNCP 41993 (Niveau 7) de notre solution en production :
+- **Data Drift (Wasserstein BioBERT)** : Mesure continue de la distance de Wasserstein sur les distributions d'embeddings BioBERT des protocoles récents (`drift_detection.py`).
+- **Concept Drift (Human-in-the-Loop)** : Recueil des corrections d'entités par les praticiens médicaux dans la table Supabase de feedback.
+- **Réentraînement Événementiel LoRA (QLoRA 4-bit)** : Dès que la dérive dépasse le seuil critique ($W > 0.15$), GitHub Actions ou l'orchestrateur local démarre l'instance GPU AWS EC2, réentraîne uniquement les matrices légères de LoRA (~84 Mo) sur Qwen2.5-7B, versionne l'adaptateur sur **AWS S3** et **MLflow**, puis coupe immédiatement l'instance GPU (**Auto-Kill FinOps**).
 
 ### 2. Améliorations Techniques
 - **Traitement Multi-modal (CNN / ViT)** : Analyser directement les images, graphiques et scanners encapsulés dans les PDF grâce à des réseaux de neurones convolutifs (CNN) ou des Vision Transformers.
