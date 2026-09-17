@@ -8,7 +8,8 @@ mlruns/
 *.tfstate
 *.tfstate.backup
 *.safetensors
-docs/
+docs/*
+!docs/*.md
 _scratch_scripts/
 models/
 data/
@@ -17,5 +18,7 @@ data/
 *.lnk
 *.bat
 *.txt
+!requirements*.txt
+!requirements_*.txt
 _scripts/
 scripts/

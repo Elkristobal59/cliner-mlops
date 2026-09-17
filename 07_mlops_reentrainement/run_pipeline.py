@@ -35,6 +35,7 @@ if sys.platform == "win32":
 from drift_detection import check_drift
 from ec2_manager import EC2GPUManager
 from finetune_lora import run_lora_finetuning
+from s3_storage import S3StorageManager
 
 
 def orchestrate_mlops_pipeline(
@@ -100,9 +101,16 @@ def orchestrate_mlops_pipeline(
         pipeline_report["finetuning"] = train_res
         pipeline_report["steps_completed"].append("finetune_completed")
 
-        print("\n📍 [ÉTAPE 4/4] Versionnage & Enregistrement (MLflow & HF Hub)...")
+        print("\n📍 [ÉTAPE 4/4] Versionnage & Enregistrement (AWS S3, MLflow & HF Hub)...")
         print(f"  ├── Nouvelle version d'adaptateur : {train_res['model_version']}")
         print(f"  ├── Poids de l'adaptateur sauvegardés : {train_res['output_path']} (~{train_res['adapter_size_mb']} Mo)")
+        
+        # Sauvegarde vers AWS S3
+        s3 = S3StorageManager(dry_run=dry_run)
+        s3_res = s3.upload_lora_adapter(train_res['output_path'], version=train_res.get('model_version', 'v2'))
+        pipeline_report["s3_upload"] = s3_res
+
+        print(f"  ├── Artefact Cloud S3 : {s3_res.get('s3_root_uri')}")
         print("  └── Enregistrement dans le Model Registry : Statut 'Production' validé ✅")
         pipeline_report["steps_completed"].append("model_registered")
 
