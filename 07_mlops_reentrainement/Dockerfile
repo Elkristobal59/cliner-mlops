@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY drift_detection.py /app/
 COPY ec2_manager.py /app/
 COPY finetune_lora.py /app/
+COPY s3_storage.py /app/
 COPY run_pipeline.py /app/
 
 # Déclaration du volume pour la persistance des modèles réentraînés
