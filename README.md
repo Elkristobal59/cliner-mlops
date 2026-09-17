@@ -7,7 +7,7 @@ Ce projet est une application complète (Data Engineering & Data Science) permet
 L'application suit une architecture hautement optimisée (FinOps) séparant drastiquement la recherche rapide (CPU) de l'extraction lourde (GPU) :
 
 - **Branche A (Recherche Instantanée & Gratuite)** : L'application interroge l'API officielle ClinicalTrials V2 via des requêtes ciblées. Les résultats (Titre, Phase, Maladie) sont immédiatement affichés dans un tableau Streamlit. **Cette étape ne consomme aucune ressource IA.**
-- **Branche B (Extraction & RAG Hybride via GPU)** : Uniquement lorsque l'utilisateur sélectionne une étude spécifique ou pose une question, le pipeline IA est déclenché sur un serveur distant (Lightning AI).
+- **Branche B (Extraction & RAG Hybride via GPU)** : Uniquement lorsque l'utilisateur sélectionne une étude spécifique ou pose une question, le pipeline IA est déclenché sur un serveur distant doté de GPU (**AWS EC2 g4dn.xlarge**).
   - **Le Retriever (BioBERT)** : Fragmente le texte de l'essai et isole uniquement les paragraphes pertinents par similarité vectorielle.
   - **Le Generator NER (Qwen-7B + LoRA via vLLM)** : Notre LLM "In-House" (optimisé via QLoRA sur le dataset CHIA) lit le paragraphe ciblé et extrait un fichier JSON structuré des entités médicales à la vitesse de l'éclair.
   - **Le Chatbot RAG (Qwen-7B Instruct)** : Un agent conversationnel capable de répondre à des questions libres en s'appuyant sur les paragraphes vectorisés de la base, sans l'adaptateur LoRA pour garantir une réponse fluide.
@@ -29,63 +29,39 @@ Pour garantir une rigueur scientifique totale (pas de *Data Leakage*), l'équipe
 
 **1. Cloner le projet**
 ```bash
-git clone https://github.com/Elkristobal59/clinicalapp.git
-cd clinicalapp
+git clone https://github.com/Elkristobal59/cliner-mlops.git
+cd cliner-mlops
 ```
 
-**2. Lancer la Sainte Trinité des Terminaux (Lightning AI)**
-Lors du démarrage de votre instance Lightning AI, vous devez lancer l'infrastructure backend (API + GPU) et l'outil de monitoring (MLflow).
-Ouvrez 4 terminaux différents et lancez ces 4 commandes. **Il vous suffit de copier-coller, aucune URL n'est à modifier !**
+**2. Lancement du Backend Inférence & Monitoring (AWS EC2 GPU / Docker)**
 
-**Avant de lancer Uvicorn, configurez la connexion Supabase :**
+En environnement de production ou sur une instance **AWS EC2 `g4dn.xlarge`** (Nvidia T4 GPU) :
 
 ```bash
+# Configuration de la base Supabase
 echo 'SUPABASE_DATABASE_URL="postgresql://postgres.<PROJECT_REF>:<PASSWORD_URL_ENCODED>@<SUPABASE_POOLER_HOST>:6543/postgres"' > .env
+
+# Lancer l'API FastAPI et le serveur MLflow
+uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+mlflow ui --host 0.0.0.0 --port 5000 --disable-security-middleware &
 ```
 
-Remplacez `<PROJECT_REF>`, `<PASSWORD_URL_ENCODED>` et `<SUPABASE_POOLER_HOST>` par les paramètres fournis dans Supabase.
-
-
-**Terminal 1 : Le Cerveau (API & Modèles GPU)**
-```bash
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-```
-
-**Terminal 2 : Le Pont API (Pour communiquer avec Streamlit)**
-```bash
-npx localtunnel --port 8000 --subdomain protocole-clinique-api
-```
-
-**Terminal 3 : L'Observatoire (Dashboard MLflow)**
-```bash
-mlflow ui --host 0.0.0.0 --port 5000 --disable-security-middleware
-```
-
-**Terminal 4 : Le Pont MLflow (Pour voir le Dashboard)**
-```bash
-npx localtunnel --port 5000 --subdomain mlflow-clinique-chris
-```
-
-✅ **C'est prêt !** 
-- L'URL de l'API est fixée sur : `https://protocole-clinique-api.loca.lt` (à insérer dans Streamlit).
-- Vos logs d'extractions en direct sont sur : `https://mlflow-clinique-chris.loca.lt` (cliquez sur "Click to Continue" pour y accéder).
-
-
+> 💡 **FinOps & Auto-Kill** : Pour ne pas laisser l'instance EC2 tourner inutilement, le module `07_mlops_reentrainement/ec2_manager.py` allume l'instance à la demande et l'éteint automatiquement dès la fin des opérations.
 
 ## 📂 Déploiement de l'Interface Web (Render / Docker)
 
-L'interface client (Streamlit) est dockerisée pour être déployée sur Render, Heroku, etc.
-Le projet utilise un fichier `requirements-frontend.txt` allégé pour le conteneur Docker afin d'éviter l'installation des librairies GPU lourdes (torch, vllm, transformers) sur le frontend Streamlit. Tout le calcul GPU reste centralisé sur Lightning AI.
+L'interface client (Streamlit) est dockerisée pour être déployée sur Render, Heroku ou Cloud Run.
+Le projet utilise un fichier `requirements-frontend.txt` allégé pour le conteneur Docker afin d'éviter l'installation des librairies GPU lourdes (torch, vllm, transformers) sur le frontend Streamlit. Tout le calcul GPU reste centralisé sur l'instance AWS EC2.
 
 ```bash
 docker-compose up --build
 ```
 L'application sera accessible sur le port `8501`.
 
-> 🛠️ **Configuration & Variables d'Environnement sur Render** :
-> Pour que Streamlit communique avec Lightning AI et Supabase, ajoutez impérativement ces variables dans votre dashboard Render :
-> - `LIGHTNING_AI_API_URL` : L'URL de votre pont LocalTunnel (ex: `https://protocole-clinique-api.loca.lt`)
-> - `SUPABASE_URL` et `SUPABASE_KEY` : Vos clés publiques d'API Supabase.
+> 🛠️ **Configuration & Variables d'Environnement sur Render / Cloud** :
+> Pour que Streamlit communique avec l'API backend et Supabase, ajoutez ces variables dans votre dashboard :
+> - `BACKEND_API_URL` : L'URL de votre backend API EC2 (ex: `http://<IP_PUBLIQUE_EC2>:8000` ou endpoint HTTPS)
+> - `SUPABASE_URL` et `SUPABASE_KEY` : Vos clés d'API Supabase.
 > 
 > 🛠️ **Dépannage Render** :
 > - **Redémarrages intempestifs (`Stopping...`)** : Fixez le port en ajoutant la variable d'environnement `PORT=8501`.
