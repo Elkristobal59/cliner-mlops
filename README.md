@@ -12,9 +12,10 @@ L'application suit une architecture hautement optimisée (FinOps) séparant dras
   - **Le Generator NER (Qwen-7B + LoRA via vLLM)** : Notre LLM "In-House" (optimisé via QLoRA sur le dataset CHIA) lit le paragraphe ciblé et extrait un fichier JSON structuré des entités médicales à la vitesse de l'éclair.
   - **Le Chatbot RAG (Qwen-7B Instruct)** : Un agent conversationnel capable de répondre à des questions libres en s'appuyant sur les paragraphes vectorisés de la base, sans l'adaptateur LoRA pour garantir une réponse fluide.
   - *(Voir le détail des interactions dans [architecture_data_flow.md](docs/architecture_data_flow.md))*
-- **Stockage Cloud (Supabase Storage & DB)** : Les PDF bruts sont sauvegardés dans un bucket public sur Supabase (`clinical_pdfs`). Les vecteurs mathématiques sont indexés via l'extension `pgvector`.
-- **⚡ Cache Intelligent (Supabase)** : Si un essai clinique a déjà été extrait par le passé, son résultat est stocké en base (`clinical_ner_cache`). L'application l'affiche instantanément (0.1s), esquivant ainsi tout traitement GPU coûteux.
-- **Monitoring** : `MLflow` pour le suivi des performances en temps réel (latence, prompts, JSON de sortie, Cache Hits).
+- **Stockage Cloud Hybride (AWS S3 + Supabase pgvector)** :
+  - **AWS S3 (Data Lake & Model Registry)** : Stockage pérenne haute capacité pour les PDF de protocoles bruts (`clinical_pdfs/`), les datasets CHIA (`datasets/`), et les adaptateurs LoRA versionnés (`models_lora/`).
+  - **PostgreSQL Supabase (pgvector & Operational DB)** : Indexation vectorielle BioBERT (768 dimensions), recherche sémantique par similarité cosinus (`<=>`), et gestion du **Cache Intelligent** (`clinical_ner_cache`) pour esquiver les traitements GPU coûteux en 0.1s.
+- **Monitoring & Traçabilité** : `MLflow` pour le suivi des métriques en temps réel (latence, prompts, loss d'entraînement, Cache Hits), avec persistance des artefacts sur AWS S3.
 
 ## 📂 Rôle des Scripts de Machine Learning & Données (`scripts/`)
 
