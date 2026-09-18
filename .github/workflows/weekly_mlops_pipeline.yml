@@ -1,0 +1,42 @@
+name: Weekly MLOps Drift & Retraining Pipeline
+
+on:
+  schedule:
+    # Exécution planifiée chaque lundi matin à 02h00 UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch: # Déclenchement manuel en un clic pour les démonstrations
+
+jobs:
+  weekly-mlops-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest flake8 numpy scipy boto3 mlflow
+
+      - name: 🧪 Run Automated PyTest Suite
+        run: |
+          pytest tests/ -v
+
+      - name: 🚀 Run Continuous Training Orchestrator
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'eu-west-3' }}
+          AWS_EC2_GPU_INSTANCE_ID: ${{ secrets.AWS_EC2_GPU_INSTANCE_ID }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME || 'cliner-mlops' }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        run: |
+          python 07_mlops_reentrainement/run_pipeline.py --dry-run --threshold 0.15

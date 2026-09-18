@@ -348,7 +348,7 @@ streamlit run app/streamlit_app.py
 
 ## ⚙️ Intégration Continue & Déploiement (GitHub Actions CI/CD)
 
-Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal59/cliner-mlops) intègre deux workflows automatisés configurés avec 7 secrets de production :
+Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal59/cliner-mlops) intègre trois workflows automatisés configurés avec 7 secrets de production :
 
 * **Secrets GitHub configurés :** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (`eu-west-3`), `S3_BUCKET_NAME` (`cliner-mlops`), `MLFLOW_TRACKING_URI`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
 * **`ci_mlops.yml` (Quality Gate à chaque push)** :
@@ -356,9 +356,12 @@ Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal5
   2. **Suite de Tests Automatisés PyTest (`pytest tests/ -v`)** : 9 tests unitaires et d'intégration validant le calcul de drift Wasserstein, le cycle de vie EC2 FinOps, le fine-tuning LoRA, le connecteur S3 et l'intégrité des datasets CHIA.
   3. **Simulation du cycle Continuous Training LoRA** avec enregistrement direct sur MLflow Cloud Run.
   4. **Construction des conteneurs Docker** (`cliner-frontend` et `cliner-mlops-worker`) et push automatique sur Docker Hub.
+* **`weekly_mlops_pipeline.yml` (Surveillance Hebdomadaire du Drift & Continuous Training)** :
+  * Planifié chaque lundi à 02h00 UTC via cron GitHub Actions (**100% Free Tier, 0,00 € de coût de veille**).
+  * Exécute les tests PyTest, analyse la dérive de Wasserstein sur la fenêtre glissante des 5 derniers protocoles, et lance le réentraînement LoRA si $W > 0.15$.
 * **`deploy_ec2_autokill.yml` (Déploiement EC2 à la demande avec minuteur FinOps)** :
   * Déclenchable manuellement depuis l'onglet Actions avec sélection de la durée (15, 30, 45, 60 min).
-  * Démarre l'instance GPU AWS, maintient la session active pendant la démo, et exécute **l'Auto-Kill systématique** (`if: always()`).
+  * Démarre l'instance GPU AWS, maintient la session active pendant les démonstrations, et exécute **l'Auto-Kill systématique** (`if: always()`).
 
 ---
 
@@ -426,3 +429,14 @@ Les deux projets sont **strictement étanches** :
 * **BioBERT = Encodeur Spécialisé (Bi-Encoder / 110M paramètres) :** Pré-entraîné sur PubMed/PMC, il ne génère aucun texte ni JSON. Il projette instantanément les paragraphes dans un espace vectoriel de 768 dimensions pour le filtrage géométrique (RAG). Il tourne rapidement sur simple CPU (0,00 €).
 * **Qwen2.5-7B = Décodeur Génératif (LLM / 7 Milliards de paramètres) :** Modèle lourd capable de raisonner et de produire un schéma JSON strict. Si on lui passait un protocole brut de 50 pages (ou un JSON massif de 10 000 tokens), on observerait : saturation de la mémoire GPU, latence de traitement dégradée (>45s), risque d'hallucinations (*Lost in the Middle*) et explosion des coûts d'inférence.
 * **Synergie Gagnante (Pattern Retriever-Extractor) :** BioBERT + Supabase filtrent 98% du bruit en **12 millisecondes** pour isoler les 2 paragraphes clés, puis Qwen concentre toute son attention sur ces 2 paragraphes pour livrer un JSON médical chirurgical en **3 secondes**, avec **zéro hallucination**.
+
+### Q6 : Comment est orchestré le réentraînement continu ? Pourquoi un Cron GitHub Actions ? Faut-il vider la base ?
+* **Choix de l'Orchestrateur (Option 1 - GitHub Actions Cron Hebdomadaire)** : Configuré dans [`.github/workflows/weekly_mlops_pipeline.yml`](.github/workflows/weekly_mlops_pipeline.yml) pour s'exécuter chaque lundi à 02h00 UTC. C'est la solution retenue car elle est **100% Free Tier (2 000 min/mois gratuites)**, stocke les secrets de manière chiffrée, et n'engendre **aucun coût de veille (0,00 €)**. Les alternatives comme AWS EventBridge + Lambda ou Webhook Supabase introduiraient des composants payants en attente 24/7 (anti-pattern FinOps).
+* **Cinématique d'Ingestion & Déclenchement :**
+  1. *À la demande (Médecin)* : Sur l'UI Streamlit, le praticien cherche n'importe quelle maladie (ex : cancer du sein, mélanome, diabète). L'étude choisie est ingérée en direct et mise en cache.
+  2. *Automatique (Veille MLOps)* : Le Cron s'exécute le lundi sur une cohorte cible d'oncologie ou filtre les études récemment mises à jour sur ClinicalTrials.gov V2 (`filter.advanced=AREA[LastUpdatePostDate]RANGE[NOW-7DAYS,NOW]`).
+* **Politique de Rétention des Données (Non, on ne vide jamais la base !) :**
+  - **AWS S3 Data Lake :** Données brutes immuables partitionnées par date (`s3://cliner-mlops/clinical_studies/`). Stocker 10 000 protocoles JSON coûte moins de 0,005 $ par an ; ils constituent l'historique d'audit médical indispensable.
+  - **Supabase pgvector :** Mises à jour idempotentes (`DELETE WHERE doc_id = %s` avant réinsertion) uniquement si une étude est révisée, sans supprimer les autres.
+  - **Détection de Dérive (Wasserstein) :** Analyse calculée sur une **fenêtre glissante des 5 derniers protocoles insérés** (`ORDER BY id DESC LIMIT 5`) comparée au Gold Standard CHIA de référence (800 protocoles). Si $W > 0.15 \rightarrow$ Allumage EC2 GPU $\rightarrow$ Fine-Tuning LoRA $\rightarrow$ Auto-Kill immédiat !
+
