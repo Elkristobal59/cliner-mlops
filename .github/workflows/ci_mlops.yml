@@ -31,7 +31,11 @@ jobs:
           # Stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F821 --show-source --statistics --exclude=.git,__pycache__,docs,data,models,scripts,_scratch_scripts
 
-      - name: 🧪 Run MLOps Continuous Training Pipeline (Simulation & Quality Gate)
+      - name: 🧪 Run Automated PyTest Suite (Unit & Integration Tests)
+        run: |
+          pytest tests/ -v
+
+      - name: 🚀 Run MLOps Continuous Training Pipeline (Simulation & Quality Gate)
         env:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

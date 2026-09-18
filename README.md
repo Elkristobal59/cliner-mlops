@@ -321,17 +321,23 @@ python 07_mlops_reentrainement/finetune_lora.py --dry-run
 python 07_mlops_reentrainement/s3_storage.py
 ```
 
-### 3. Lancer l'API Backend FastAPI
+### 3. Exécuter la Suite de Tests Automatisés (PyTest - Quality Gate CI/CD)
+Valide l'intégrité logicielle, la cohérence des formats et l'absence de régression (9 tests unitaires & intégration) :
+```powershell
+pytest tests/ -v
+```
+
+### 4. Lancer l'API Backend FastAPI
 ```powershell
 uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 * **Documentation Swagger interactive** : [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) (Endpoints `/predict`, `/feedback`, `/drift`).
 
-### 4. Consulter le Dashboard MLflow en Direct dans le Cloud
+### 5. Consulter le Dashboard MLflow en Direct dans le Cloud
 Le serveur est accessible en direct à l'adresse officielle :  
 👉 **[`https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app`](https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app/#/experiments/2)**
 
-### 5. Lancer l'Interface Web Streamlit
+### 6. Lancer l'Interface Web Streamlit
 ```powershell
 streamlit run app/streamlit_app.py
 ```
@@ -346,8 +352,9 @@ Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal5
 * **Secrets GitHub configurés :** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (`eu-west-3`), `S3_BUCKET_NAME` (`cliner-mlops`), `MLFLOW_TRACKING_URI`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
 * **`ci_mlops.yml` (Quality Gate à chaque push)** :
   1. Linting strict Flake8 (détection des erreurs de syntaxe et imports manquants).
-  2. Simulation du cycle Continuous Training LoRA avec enregistrement direct sur MLflow Cloud Run.
-  3. Construction des conteneurs Docker (`cliner-frontend` et `cliner-mlops-worker`) et push automatique sur Docker Hub.
+  2. **Suite de Tests Automatisés PyTest (`pytest tests/ -v`)** : 9 tests unitaires et d'intégration validant le calcul de drift Wasserstein, le cycle de vie EC2 FinOps, le fine-tuning LoRA, le connecteur S3 et l'intégrité des datasets CHIA.
+  3. **Simulation du cycle Continuous Training LoRA** avec enregistrement direct sur MLflow Cloud Run.
+  4. **Construction des conteneurs Docker** (`cliner-frontend` et `cliner-mlops-worker`) et push automatique sur Docker Hub.
 * **`deploy_ec2_autokill.yml` (Déploiement EC2 à la demande avec minuteur FinOps)** :
   * Déclenchable manuellement depuis l'onglet Actions avec sélection de la durée (15, 30, 45, 60 min).
   * Démarre l'instance GPU AWS, maintient la session active pendant la démo, et exécute **l'Auto-Kill systématique** (`if: always()`).
