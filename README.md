@@ -15,6 +15,7 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 │   ┌─────────────────────────────────────────────────┐                                                 │
 │   │  Application Web Streamlit (Docker / Render)   │                                                 │
 │   │  • Recherche API ClinicalTrials V2 (100% CPU/0€)│                                                 │
+│   │  • Summary Table (tri, filtres & sélection)     │                                                 │
 │   │  • Upload PDF & Visualisation des entités NER   │                                                 │
 │   └───────────────────────┬─────────────────────────┘                                                 │
 │                           │ HTTPS (Port 8000)                                                         │
@@ -65,17 +66,20 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 ## 🔄 La Cinématique Complète en Production (Les 2 Flux Détaillés)
 
 ### 🔹 Flux 1 : Le Parcours Utilisateur & Inférence Temps Réel (Le Praticien)
-1. **Recherche Rapide (CPU/Gratuit)** : Le médecin cherche une maladie sur l'UI Streamlit. L'application interroge l'API ClinicalTrials.gov V2 en direct sans allumer aucun modèle IA (0.00 €).
-2. **Double Voie d'Ingestion (JSON Officiel API v2 vs Archivage PDF S3)** :
+1. **Recherche Rapide (CPU / 0,00 €)** : Le médecin cherche une maladie sur l'UI Streamlit. L'application interroge l'API ClinicalTrials.gov V2 en direct en une seule requête optimisée sans allumer aucun modèle IA (0.00 €).
+2. **Tableau Récapitulatif Dynamique (*Summary Table*)** :
+   * Les études identifiées sont instantanément affichées dans une table interactive (NCT ID, Titre officiel, Statut de recrutement, Phase clinique, Intervention testée et lien direct cliquable vers la fiche officielle `clinicaltrials.gov`).
+   * Le praticien peut filtrer, trier les résultats et cocher directement les essais d'intérêt avant de lancer l'extraction sémantique.
+3. **Double Voie d'Ingestion (JSON Officiel API v2 vs Archivage PDF S3)** :
    * **Voie Principale (Majorité des cas - JSON Natif)** : La majorité des études cliniques est directement ingérée sous le format standardisé officiel **ClinicalTrials.gov JSON Schema v2** (structure hiérarchique `Study` découpée en `protocolSection`, notamment les modules `eligibilityModule` avec `eligibilityCriteria`, `identificationModule`, `conditionsModule` et `designModule`). Le texte clinique propre est extrait, normalisé et concaténé instantanément sans nécessiter d'OCR ni de parsing PDF lourd.
    * **Voie Secondaire (Protocoles Complets / Upload Manuel - PDF)** : Lorsqu'un protocole intégral scanné de 50 pages est sélectionné ou uploadé par le médecin, il est sauvegardé et versionné dans le Data Lake AWS S3 (`s3://cliner-mlops/clinical_pdfs/`).
-3. **Le Documentaliste (BioBERT Retriever - Modèle Encodeur Spécialisé)** :
+4. **Le Documentaliste (BioBERT Retriever - Modèle Encodeur Spécialisé)** :
    * **Nature du modèle (Encoder-only) :** BioBERT est un modèle spécialisé pré-entraîné sur des millions d'articles biomédicaux (PubMed, PMC). Il n'est **ni conversationnel ni génératif** : il est strictement incapable de dialoguer, de rédiger du texte ou de formater du JSON.
    * **Mission d'indexation géométrique :** Son unique tâche consiste à lire et convertir la sémantique de chaque paragraphe (issu du JSON ou du PDF) en un vecteur mathématique dense de **768 dimensions**. Il agit comme un pur "archiviste documentaliste" ultra-rapide (tournant sur CPU), chargé de cartographier l'information avant recherche.
-4. **Recherche Sémantique Vectorielle (Supabase `pgvector`)** : Supabase calcule la distance cosinus (`<=>`) en **12 millisecondes** pour isoler uniquement les 2 ou 3 paragraphes cruciaux contenant les critères d'éligibilité (Context Recall : 96.5%).
-5. **Cache Intelligent (`clinical_ner_cache`)** : Si cet essai a déjà été analysé, le résultat JSON est renvoyé en **0.01 seconde**, esquivant tout traitement GPU coûteux.
-6. **L'Extracteur Expert (Qwen2.5-7B LoRA)** : Si le cache est vide, le LLM fine-tuné sur CHIA reçoit le texte brut des 2 paragraphes et génère le JSON médical strict en 3 secondes sans hallucination.
-7. **Traçabilité MLflow Cloud Run** : Le temps de réponse, le prompt et les métriques sont envoyés en HTTPS vers Google Cloud Run.
+5. **Recherche Sémantique Vectorielle (Supabase `pgvector`)** : Supabase calcule la distance cosinus (`<=>`) en **12 millisecondes** pour isoler uniquement les 2 ou 3 paragraphes cruciaux contenant les critères d'éligibilité (Context Recall : 96.5%).
+6. **Cache Intelligent (`clinical_ner_cache`)** : Si cet essai a déjà été analysé, le résultat JSON est renvoyé en **0.01 seconde**, esquivant tout traitement GPU coûteux.
+7. **L'Extracteur Expert (Qwen2.5-7B LoRA)** : Si le cache est vide, le LLM fine-tuné sur CHIA reçoit le texte brut des 2 paragraphes et génère le JSON médical strict en 3 secondes sans hallucination.
+8. **Traçabilité MLflow Cloud Run** : Le temps de réponse, le prompt et les métriques sont envoyés en HTTPS vers Google Cloud Run.
 
 ---
 
