@@ -1,6 +1,8 @@
 .env
 *accessKeys.csv
 *.csv
+*.pem
+*.key
 __pycache__/
 *.pyc
 .pytest_cache/
