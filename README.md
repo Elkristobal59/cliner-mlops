@@ -34,14 +34,31 @@ git clone https://github.com/Elkristobal59/cliner-mlops.git
 cd cliner-mlops
 ```
 
-**2. Lancement du Backend Inférence & Monitoring (AWS EC2 GPU / Docker)**
+**2. Configuration des Identifiants & Fichier `.env`**
+
+Copiez le modèle `.env.example` vers `.env` :
+```bash
+cp .env.example .env
+```
+
+Le projet isole strictement ses responsabilités entre trois briques de services :
+- **AWS Cloud (IAM, S3 Data Lake & FinOps EC2 GPU)** :
+  - **IAM User dédié** : Créer un utilisateur IAM programmatique (ex: `cliner-mlops-bot`) avec `AWS_ACCESS_KEY_ID` et `AWS_SECRET_ACCESS_KEY`.
+    - Droits nécessaires : `AmazonS3FullAccess` (ou restreint au bucket `cliner-clinical-storage-dev`) et droits EC2 de contrôle d'état (`ec2:StartInstances`, `ec2:StopInstances`, `ec2:DescribeInstances`).
+  - **S3 Data Lake** : Un bucket dédié (ex: `cliner-clinical-storage-dev`, région `eu-west-3`) pour stocker les protocoles PDF volumineux, les datasets CHIA et les poids d'adaptateurs LoRA (~84 Mo).
+  - **Mode FinOps / Simulation** : `MOCK_AWS_EC2=true` est activé par défaut. Il permet d'exécuter et de démontrer toute la cinématique MLOps à 0.00 € de coût.
+- **Supabase (Base Opérationnelle & Vectorielle pgvector)** :
+  - `SUPABASE_DATABASE_URL` : Chaîne PostgreSQL vers le pooler Supabase (port `6543`).
+  - Gère les requêtes temps réel : indexation vectorielle `pgvector` des embeddings BioBERT (768d), recherche par similarité cosinus (`<=>`) en 12 ms, et cache chirurgical `clinical_ner_cache` (0.01s).
+- **MLflow (Monitoring & Model Registry)** :
+  - Fonctionne par défaut en local sans aucun coût via SQLite embarqué (`sqlite:///mlflow.db`).
+  - Enregistre les métriques de dérive, les hyperparamètres LoRA ($r=16, \alpha=32$, lr=$2\times 10^{-4}$) et les courbes de Loss.
+
+**3. Lancement du Backend Inférence & Monitoring (AWS EC2 GPU / Docker)**
 
 En environnement de production ou sur une instance **AWS EC2 `g4dn.xlarge`** (Nvidia T4 GPU) :
 
 ```bash
-# Configuration de la base Supabase
-echo 'SUPABASE_DATABASE_URL="postgresql://postgres.<PROJECT_REF>:<PASSWORD_URL_ENCODED>@<SUPABASE_POOLER_HOST>:6543/postgres"' > .env
-
 # Lancer l'API FastAPI et le serveur MLflow
 uvicorn api.main:app --host 0.0.0.0 --port 8000 &
 mlflow ui --host 0.0.0.0 --port 5000 --disable-security-middleware &
