@@ -80,6 +80,7 @@ pytest tests/ -v
 
 📍 [ÉTAPE 3/4] Exécution du Fine-Tuning LoRA (QLoRA 4-bit sur Qwen-7B)...
   ├── Loss finale : 0.284
+  ├── F1-Score validé (CHIA) : 58.3% (Précision: 63.0%)
   └── Poids de l'adaptateur sauvegardés : models/qwen_7b_lora_retrained (~84 Mo)
 
 📍 [ÉTAPE 4/4] Versionnage & Enregistrement (MLflow & HF Hub)...

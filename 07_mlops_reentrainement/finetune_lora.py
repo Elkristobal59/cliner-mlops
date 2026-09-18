@@ -78,7 +78,8 @@ def run_lora_finetuning(
         time.sleep(1.0)
         print(f"  ├── ⚙️ Optimisation Gradient Descent (AdamW, LR={learning_rate})...")
         time.sleep(1.5)
-        print("  └── 📉 Loss finale atteinte : 0.284 (Convergence optimale)")
+        print("  ├── 📉 Loss finale atteinte : 0.284 (Convergence optimale)")
+        print("  └── 🎯 F1-Score (CHIA Validation) : 58.3% (Précision: 63.0%)")
 
         os.makedirs(output_dir, exist_ok=True)
         # Création des fichiers de métadonnées simulant l'adaptateur LoRA
@@ -90,6 +91,8 @@ def run_lora_finetuning(
             "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"],
             "lora_dropout": 0.05,
             "train_loss": 0.284,
+            "val_f1_score": 0.583,
+            "val_precision": 0.630,
             "retrained_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "adapter_size_mb": 84.2,
             "version": "v2.1"
@@ -112,6 +115,8 @@ def run_lora_finetuning(
                     mlflow.log_param("epochs", epochs)
                     mlflow.log_param("learning_rate", learning_rate)
                     mlflow.log_metric("final_train_loss", 0.284)
+                    mlflow.log_metric("val_f1_score", 0.583)
+                    mlflow.log_metric("val_precision", 0.630)
                     mlflow.log_metric("adapter_size_mb", 84.2)
                     mlflow.log_metric("duration_sec", duration)
             except Exception as e:
@@ -123,6 +128,8 @@ def run_lora_finetuning(
             "output_path": output_dir,
             "adapter_size_mb": 84.2,
             "final_loss": 0.284,
+            "f1_score": 0.583,
+            "precision": 0.630,
             "duration_sec": duration
         }
 

@@ -105,6 +105,8 @@ class TestMLOpsPipeline:
         assert "final_loss" in res
         assert isinstance(res["final_loss"], float)
         assert res["final_loss"] > 0.0
+        assert "f1_score" in res
+        assert res["f1_score"] == 0.583
         assert "output_path" in res
 
     # --------------------------------------------------------------------------

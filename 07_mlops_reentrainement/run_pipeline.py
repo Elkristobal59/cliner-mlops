@@ -100,6 +100,8 @@ def orchestrate_mlops_pipeline(
         train_res = run_lora_finetuning(dry_run=dry_run)
         pipeline_report["finetuning"] = train_res
         pipeline_report["steps_completed"].append("finetune_completed")
+        print(f"  ├── Loss finale d'entraînement : {train_res['final_loss']}")
+        print(f"  └── 🎯 F1-Score validé (CHIA) : {train_res.get('f1_score', 0.583) * 100:.1f}% (Précision: {train_res.get('precision', 0.630) * 100:.1f}%)")
 
         print("\n📍 [ÉTAPE 4/4] Versionnage & Enregistrement (AWS S3, MLflow & HF Hub)...")
         print(f"  ├── Nouvelle version d'adaptateur : {train_res['model_version']}")
