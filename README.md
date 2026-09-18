@@ -217,6 +217,33 @@ Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal5
 | **Disque dur EC2 persistant** | Disque AWS EBS gp3 (80 Go) | Stockage bloc persistant à l'arrêt (~0,08 $/Go/mois) | **~6,40 $ / mois** (Couvert par les crédits gratuits) |
 | **Solde de Crédits Gratuits AWS** | Promotion AWS active jusqu'en Mars 2027 | Crédits consommés en priorité absolue | **139,99 $ de marge disponible** |
 
+### 🛡️ Contrôle FinOps & Commandes CLI de Surveillance des Coûts
+
+Afin de garantir une gouvernance FinOps rigoureuse et d'éviter toute dépense imprévue (instances orphelines, volumes EBS non attachés, adresses IP statiques inutilisées), le projet intègre des procédures de surveillance automatisées en ligne de commande :
+
+#### 1. Audit automatisé multi-régions (17 régions AWS)
+Le script [audit_aws_all_regions.py](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/audit_aws_all_regions.py) scanne l'intégralité des 17 régions AWS actives pour dresser un inventaire exhaustif en temps réel :
+```powershell
+python audit_aws_all_regions.py
+```
+* **Ressources inspectées :** Instances EC2 actives (`running`), instances à l'arrêt (`stopped`), disques EBS, adresses Elastic IP, passerelles NAT, Load Balancers (ALB/NLB), bases de données RDS, clusters EKS et VPC Interface Endpoints.
+* **Verdict FinOps :** Confirmation instantanée du coût de calcul actif (**0,00 € / heure**).
+
+#### 2. Suivi en direct du Quota GPU AWS (`g4dn.xlarge` / Famille G & VT)
+Pour monitorer l'avancement de la validation des 4 vCPUs GPU par le support AWS sans passer par la console graphique :
+```bash
+# Vérifier l'état d'avancement du ticket support (CASE_OPENED -> APPROVED) :
+aws service-quotas list-requested-service-quota-change-history --service-code ec2 --region eu-west-3
+
+# Vérifier la valeur effective appliquée du quota (0.0 -> 4.0 vCPUs) :
+aws service-quotas get-service-quota --service-code ec2 --quota-code L-DB2E81BA --region eu-west-3
+```
+
+#### 3. Contrôle instantané des instances EC2 actives (Région eu-west-3)
+```bash
+aws ec2 describe-instances --region eu-west-3 --filters "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].[InstanceId,InstanceType,State.Name]" --output table
+```
+
 ---
 
 ## 🎓 FAQ & Arguments Clés pour la Soutenance (RNCP 41993 - Niveau 7)
