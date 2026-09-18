@@ -4,8 +4,8 @@ Script : main.py (Le Cœur du Réacteur - Backend API)
 Rôle : Exposer les fonctionnalités d'IA (RAG, Extraction) via des points d'accès HTTP (FastAPI) 
 pour que le front-end (Streamlit) puisse les interroger.
 
-🎓 Explication pour le jury (L'Architecture Hybride) :
-Ce script est la définition même du MLOps. Il combine :
+Architecture Hybride du Système (RAG & LLMOps) :
+Ce script combine les composants clés du pipeline :
 1. FastAPI : Un serveur web ultra-rapide asynchrone.
 2. Transformers / vLLM : Pour charger les modèles d'IA en mémoire vidéo (VRAM).
 3. LangChain : Pour découper intelligemment les textes (Chunking).

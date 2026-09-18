@@ -60,7 +60,7 @@ def orchestrate_mlops_pipeline(
 
     print("\n" + "=" * 72)
     print("      PIPELINE D'AUTOMATISATION MLOPS & CONTINUOUS TRAINING (LoRA)")
-    print("           Projet CliNER — RNCP41993 Architecte IA (Niveau 7)")
+    print("           Projet CliNER — Pipeline MLOps Industriel")
     print("=" * 72 + "\n")
 
     # ---------------------------------------------------------
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Orchestrateur MLOps Global CliNER")
     parser.add_argument("--threshold", type=float, default=0.15, help="Seuil de dérive statistique")
     parser.add_argument("--force-retrain", action="store_true", default=True, help="Force le réentraînement pour la démo")
-    parser.add_argument("--dry-run", action="store_true", default=True, help="Mode simulation rapide pour examen")
+    parser.add_argument("--dry-run", action="store_true", default=True, help="Mode simulation rapide pour tests et validation")
     parser.add_argument("--instance-id", type=str, default=None, help="ID d'instance AWS EC2 optionnel")
     args = parser.parse_args()
 

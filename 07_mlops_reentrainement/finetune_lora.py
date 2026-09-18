@@ -5,7 +5,7 @@ Rôle :
 Ré-entraîne l'adaptateur LoRA (QLoRA 4-bit) de Qwen-7B sur les nouvelles données 
 médicales sans toucher au modèle de base (Frozen Backbone).
 
-Principes Clés pour le Jury :
+Principes Clés d'Ingénierie MLOps :
 1. FinOps & GreenOps : L'entraînement QLoRA ne prend que ~20 minutes sur GPU 
    et ne produit qu'un artefact d'environ 80 Mo (les poids de l'adaptateur LoRA), 
    au lieu de sauvegarder les 15 Go du modèle complet.
@@ -49,7 +49,7 @@ def run_lora_finetuning(
     """
     Lance le pipeline de fine-tuning QLoRA.
     En mode dry-run (ou si aucun GPU n'est présent), simule proprement l'exécution 
-    pour les tests de CI/CD et soutenance sans saturer la machine.
+    pour les tests de CI/CD et démonstrations sans saturer la machine.
     """
     start_time = time.time()
     print("=" * 70)

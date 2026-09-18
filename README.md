@@ -1,5 +1,5 @@
 # Clinical Protocols Standardization (AI-Powered) 🔬
-> **Système MLOps Hybride & Continuous Training d'Architecte IA (RNCP 41993 - Niveau 7 - Bloc 4)**
+> **Système MLOps Hybride & Continuous Training (Data Engineering, Cloud Architecture & LLMOps)**
 
 Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & Cloud Architecture) permettant l'ingestion, le découpage intelligent, l'indexation vectorielle, l'extraction chirurgicale d'entités cliniques (NER) depuis des protocoles médicaux volumineux (PDF), ainsi que le monitoring et le réentraînement automatisé en boucle fermée.
 
@@ -68,8 +68,9 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 ### 🔹 Flux 1 : Le Parcours Utilisateur & Inférence Temps Réel (Le Praticien)
 1. **Recherche Rapide (CPU / 0,00 €)** : Le médecin cherche une maladie sur l'UI Streamlit. L'application interroge l'API ClinicalTrials.gov V2 en direct en une seule requête optimisée sans allumer aucun modèle IA (0.00 €).
 2. **Tableau Récapitulatif Dynamique (*Summary Table*) :**
-   * **Traitement 100% en mémoire vive (RAM / Session State) :** Contrairement aux gros fichiers archivés sur AWS S3 ou aux index vectoriels dans Supabase, la Summary Table ne surcharge aucune base de données : elle est générée dynamiquement et instantanément en mémoire à la réception du flux JSON de l'API.
+   * **Traitement 100% en mémoire vive (RAM / Session State) :** Contrairement aux gros fichiers archivés sur AWS S3 ou aux index vectoriels dans Supabase, la Summary Table ne surcharge aucune base de données lors de la navigation : elle est générée dynamiquement et instantanément en mémoire à la réception du flux JSON de l'API.
    * **Exploration & Export :** Les études identifiées sont affichées dans une table interactive (NCT ID, Titre officiel, Statut de recrutement, Phase clinique, Intervention testée et lien direct vers la fiche `clinicaltrials.gov`). Le praticien peut trier, cocher les essais cibles ou télécharger la table complète au format CSV (`summary_table.csv`).
+   * **Archivage Data Lake S3 (vs Ancien Stockage Supabase) :** Dans les versions initiales, chaque ligne de résumé était persistée dans une table relationnelle Supabase. Pour éviter cette surcharge transactionnelle et adopter un modèle Data Lakehouse propre, les tables récapitulatives sont désormais exportées et archivées directement sur **AWS S3** (`s3://cliner-mlops/summary_tables/`) au format CSV/Parquet pour l'analytique et l'audit, libérant Supabase pour ses deux rôles à forte valeur ajoutée : la recherche vectorielle `pgvector` et le cache d'inférence `clinical_ner_cache`.
 3. **Double Voie d'Ingestion (JSON Officiel API v2 vs Archivage PDF S3)** :
    * **Voie Principale (Majorité des cas - JSON Natif)** : La majorité des études cliniques est directement ingérée sous le format standardisé officiel **ClinicalTrials.gov JSON Schema v2** (structure hiérarchique `Study` découpée en `protocolSection`, notamment les modules `eligibilityModule` avec `eligibilityCriteria`, `identificationModule`, `conditionsModule` et `designModule`). Le texte clinique propre est extrait, normalisé et concaténé instantanément sans nécessiter d'OCR ni de parsing PDF lourd.
    * **Voie Secondaire (Protocoles Complets / Upload Manuel - PDF)** : Lorsqu'un protocole intégral scanné de 50 pages est sélectionné ou uploadé par le médecin, il est sauvegardé et versionné dans le Data Lake AWS S3 (`s3://cliner-mlops/clinical_pdfs/`).
@@ -289,7 +290,7 @@ LLM_MODEL_NAME="gemini-flash-lite-latest"
 
 ## 🚀 Guide d'Exécution Pas-à-Pas
 
-### 1. Exécuter la Démo MLOps Complète (La commande reine pour le Jury)
+### 1. Exécuter la Démo du Pipeline MLOps (Simulation End-to-End)
 Lance la simulation complète (Drift Wasserstein $\rightarrow$ Démarrage EC2 $\rightarrow$ Fine-Tuning LoRA $\rightarrow$ Upload S3 $\rightarrow$ Auto-Kill EC2) en **9 secondes à 0.00 €** avec envoi réel des logs vers Google Cloud Run :
 
 ```powershell
@@ -368,7 +369,7 @@ Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal5
 | **Serveur MLflow UI** | Google Cloud Run (Paris) | **Scale-to-Zero** (Facturation par requête, CPU à 0 hors requêtes) | **0,00 €** (Inclus dans les 360 000 Gio-s gratuits) |
 | **Backend Store MLflow** | Supabase PostgreSQL | Base managée mutualisée avec pgvector | **0,00 €** (Déjà compris dans l'instance existante) |
 | **Artifact Store & Data Lake** | AWS S3 (`cliner-mlops`) | Stockage d'objets standard (~0,023 $/Go/mois) | **~0,10 $ / mois** (Couvert par les 140 $ de crédits) |
-| **Calcul Inférence / Entraînement** | AWS EC2 `g4dn.xlarge` (Nvidia T4) | **Just-In-Time Provisioning** (0,526 $/h, éteint hors usage) | **~2,00 $ / mois** pour 4h de démo/certif (Couvert par les crédits) |
+| **Calcul Inférence / Entraînement** | AWS EC2 `g4dn.xlarge` (Nvidia T4) | **Just-In-Time Provisioning** (0,526 $/h, éteint hors usage) | **~2,00 $ / mois** pour 4h de calcul actif (Couvert par les crédits) |
 | **Disque dur EC2 persistant** | Disque AWS EBS gp3 (80 Go) | Stockage bloc persistant à l'arrêt (~0,08 $/Go/mois) | **~6,40 $ / mois** (Couvert par les crédits gratuits) |
 | **Solde de Crédits Gratuits AWS** | Promotion AWS active jusqu'en Mars 2027 | Crédits consommés en priorité absolue | **139,99 $ de marge disponible** |
 
@@ -401,7 +402,7 @@ aws ec2 describe-instances --region eu-west-3 --filters "Name=instance-state-nam
 
 ---
 
-## 🎓 FAQ & Arguments Clés pour la Soutenance (RNCP 41993 - Niveau 7)
+## 🎯 FAQ Technique & Justifications d'Architecture
 
 ### Q1 : Pourquoi une architecture hybride AWS S3 + Supabase pgvector ? Pourquoi pas 100% S3 ?
 * **AWS S3 = Data Lake & Model Registry :** Stockage passif haute capacité et économique pour les gros volumes (PDFs de 50 pages, adaptateurs LoRA de 84 Mo).

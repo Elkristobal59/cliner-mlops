@@ -9,7 +9,7 @@ Ce guide décrit la mise en œuvre de l'infrastructure de calcul GPU sur **AWS E
 * **Type d'instance :** `g4dn.xlarge` (4 vCPU, 16 Go RAM, 1x GPU NVIDIA T4 16 Go VRAM)
 * **AMI :** *Deep Learning OSS Nvidia Driver AMI GPU PyTorch (Ubuntu 22.04)*
 * **Coût à la demande :** ~0.526 $/heure (~0.16 $/heure en Spot Instance).
-* **Règle FinOps :** L'instance est démarrée uniquement pour les jobs d'entraînement (~20 min) et pour la soutenance, puis éteinte immédiatement via `07_mlops_reentrainement/ec2_manager.py`.
+* **Règle FinOps :** L'instance est démarrée uniquement pour les jobs d'entraînement (~20 min) et les sessions de validation opérationnelle, puis éteinte immédiatement via `07_mlops_reentrainement/ec2_manager.py`.
 
 ---
 

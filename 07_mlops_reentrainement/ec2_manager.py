@@ -41,7 +41,7 @@ except ImportError:
 class EC2GPUManager:
     """
     Gestionnaire FinOps pour instance AWS EC2 avec GPU.
-    Supporte un mode simulation (dry-run) pour les démonstrations locales et examens.
+    Supporte un mode simulation (dry-run) pour les démonstrations locales et les tests de validation CI/CD.
     """
 
     def __init__(self, instance_id: Optional[str] = None, region: str = "eu-west-3", dry_run: bool = False):

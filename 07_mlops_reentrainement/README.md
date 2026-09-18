@@ -2,8 +2,7 @@
 
 > **Dossier :** `07_mlops_reentrainement/`  
 > **Projet :** **CliNER-MLOPS**  
-> **Titre visé :** Architecte en Intelligence Artificielle (RNCP41993 – Niveau 7)  
-> **Bloc évalué :** **Bloc 4** — Concevoir et piloter l'industrialisation et le déploiement de solutions d'IA (Continuous Training & FinOps)
+> **Composants :** Continuous Training, FinOps AWS EC2, Détection de Dérive Sémantique & Versionnage S3 / MLflow
 
 ---
 
@@ -14,11 +13,14 @@
 ├── drift_detection.py      -> mesure le drift sur les embeddings (décide s'il faut ré-entraîner)
 ├── finetune_lora.py        -> ré-entraîne l'adaptateur LoRA (QLoRA) sur Qwen 7B
 ├── ec2_manager.py          -> allume / éteint l'instance EC2 GPU (boto3)
-├── run_pipeline.py         -> l'orchestrateur : drift -> EC2 -> finetune -> récup LoRA -> kill
+├── s3_storage.py           -> connecteur AWS S3 Data Lake & Model Registry
+├── run_pipeline.py         -> l'orchestrateur : drift -> EC2 -> finetune -> S3 LoRA -> auto-kill
 ├── Dockerfile              -> packager le code de fine-tuning
 ├── requirements_mlops.txt  -> dépendances Python du conteneur
-├── scheduler.md            -> le déclencheur hebdo (cron / AWS EventBridge)
 └── README.md               -> vue d'ensemble (ce document)
+
+tests/
+└── test_mlops_pipeline.py  -> 9 tests automatisés pytest (dérive, FinOps, LoRA, S3)
 ```
 
 ---
@@ -49,9 +51,14 @@ python 07_mlops_reentrainement/ec2_manager.py --action start --dry-run
 python 07_mlops_reentrainement/ec2_manager.py --action stop  --dry-run
 ```
 
-### 3. Lancer l'Orchestrateur Complet (Démo Jury / Mode Simulé)
+### 3. Lancer l'Orchestrateur Complet (Mode Simulé End-to-End)
 ```bash
 python 07_mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
+```
+
+### 4. Lancer la Suite de Tests PyTest
+```bash
+pytest tests/ -v
 ```
 
 ---
@@ -61,7 +68,7 @@ python 07_mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
 ```text
 ╔══════════════════════════════════════════════════════════════════════╗
 ║     🚀 PIPELINE D'AUTOMATISATION MLOPS & CONTINUOUS TRAINING         ║
-║          Projet CliNER — RNCP41993 Architecte IA (Niveau 7)          ║
+║              Projet CliNER — Pipeline MLOps Industriel               ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
 📍 [ÉTAPE 1/4] Surveillance de dérive sur les protocoles récents...
