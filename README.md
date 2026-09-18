@@ -66,8 +66,10 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 
 ### 🔹 Flux 1 : Le Parcours Utilisateur & Inférence Temps Réel (Le Praticien)
 1. **Recherche Rapide (CPU/Gratuit)** : Le médecin cherche une maladie sur l'UI Streamlit. L'application interroge l'API ClinicalTrials.gov V2 en direct sans allumer aucun modèle IA (0.00 €).
-2. **Ingestion & Archivage S3** : Quand un PDF de protocole de 50 pages est sélectionné, il est sauvegardé dans le Data Lake AWS S3 (`s3://cliner-mlops/clinical_pdfs/`).
-3. **Le Documentaliste (BioBERT Retriever)** : BioBERT fragmente le document en paragraphes et calcule leurs représentations vectorielles (768 dimensions).
+2. **Double Voie d'Ingestion (JSON Officiel API v2 vs Archivage PDF S3)** :
+   * **Voie Principale (Majorité des cas - JSON Natif)** : La majorité des études cliniques est directement ingérée sous le format standardisé officiel **ClinicalTrials.gov JSON Schema v2** (structure hiérarchique `Study` découpée en `protocolSection`, notamment les modules `eligibilityModule` avec `eligibilityCriteria`, `identificationModule`, `conditionsModule` et `designModule`). Le texte clinique propre est extrait, normalisé et concaténé instantanément sans nécessiter d'OCR ni de parsing PDF lourd.
+   * **Voie Secondaire (Protocoles Complets / Upload Manuel - PDF)** : Lorsqu'un protocole intégral scanné de 50 pages est sélectionné ou uploadé par le médecin, il est sauvegardé et versionné dans le Data Lake AWS S3 (`s3://cliner-mlops/clinical_pdfs/`).
+3. **Le Documentaliste (BioBERT Retriever)** : BioBERT fragmente le document (issu du JSON ou du PDF) en paragraphes et calcule leurs représentations vectorielles (768 dimensions).
 4. **Recherche Sémantique Vectorielle (Supabase `pgvector`)** : Supabase calcule la distance cosinus (`<=>`) en **12 millisecondes** pour isoler uniquement les 2 ou 3 paragraphes cruciaux contenant les critères d'éligibilité (Context Recall : 96.5%).
 5. **Cache Intelligent (`clinical_ner_cache`)** : Si cet essai a déjà été analysé, le résultat JSON est renvoyé en **0.01 seconde**, esquivant tout traitement GPU coûteux.
 6. **L'Extracteur Expert (Qwen2.5-7B LoRA)** : Si le cache est vide, le LLM fine-tuné sur CHIA reçoit le texte brut des 2 paragraphes et génère le JSON médical strict en 3 secondes sans hallucination.
