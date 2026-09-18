@@ -67,9 +67,9 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 
 ### 🔹 Flux 1 : Le Parcours Utilisateur & Inférence Temps Réel (Le Praticien)
 1. **Recherche Rapide (CPU / 0,00 €)** : Le médecin cherche une maladie sur l'UI Streamlit. L'application interroge l'API ClinicalTrials.gov V2 en direct en une seule requête optimisée sans allumer aucun modèle IA (0.00 €).
-2. **Tableau Récapitulatif Dynamique (*Summary Table*)** :
-   * Les études identifiées sont instantanément affichées dans une table interactive (NCT ID, Titre officiel, Statut de recrutement, Phase clinique, Intervention testée et lien direct cliquable vers la fiche officielle `clinicaltrials.gov`).
-   * Le praticien peut filtrer, trier les résultats et cocher directement les essais d'intérêt avant de lancer l'extraction sémantique.
+2. **Tableau Récapitulatif Dynamique (*Summary Table*) :**
+   * **Traitement 100% en mémoire vive (RAM / Session State) :** Contrairement aux gros fichiers archivés sur AWS S3 ou aux index vectoriels dans Supabase, la Summary Table ne surcharge aucune base de données : elle est générée dynamiquement et instantanément en mémoire à la réception du flux JSON de l'API.
+   * **Exploration & Export :** Les études identifiées sont affichées dans une table interactive (NCT ID, Titre officiel, Statut de recrutement, Phase clinique, Intervention testée et lien direct vers la fiche `clinicaltrials.gov`). Le praticien peut trier, cocher les essais cibles ou télécharger la table complète au format CSV (`summary_table.csv`).
 3. **Double Voie d'Ingestion (JSON Officiel API v2 vs Archivage PDF S3)** :
    * **Voie Principale (Majorité des cas - JSON Natif)** : La majorité des études cliniques est directement ingérée sous le format standardisé officiel **ClinicalTrials.gov JSON Schema v2** (structure hiérarchique `Study` découpée en `protocolSection`, notamment les modules `eligibilityModule` avec `eligibilityCriteria`, `identificationModule`, `conditionsModule` et `designModule`). Le texte clinique propre est extrait, normalisé et concaténé instantanément sans nécessiter d'OCR ni de parsing PDF lourd.
    * **Voie Secondaire (Protocoles Complets / Upload Manuel - PDF)** : Lorsqu'un protocole intégral scanné de 50 pages est sélectionné ou uploadé par le médecin, il est sauvegardé et versionné dans le Data Lake AWS S3 (`s3://cliner-mlops/clinical_pdfs/`).
