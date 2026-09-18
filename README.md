@@ -185,6 +185,66 @@ La consultation vectorielle s'exécute de manière optimisée en cascade :
 
 ---
 
+## 📦 Données & Modèles : Cartographie et Stockage Décentralisé
+
+### 1. Le Dataset Clinique de Référence (Gold CHIA dans `data/`)
+Le dossier local [data/](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/data) contient l'ensemble des données d'entraînement et d'évaluation certifiées :
+* **`data/chia_gold_standard.json` (866 Ko)** : La vérité terrain (*Gold Standard*) de 800 protocoles cliniques annotés à la main par des experts médicaux (entités CHIA : `Condition`, `Drug`, `Procedure`, `Measurement`, etc.).
+* **`data/chia_finetuning_dataset.jsonl` (455 Ko)** & **`train_dataset.jsonl` (898 Ko)** : Jeux d'entraînement structurés sous forme de paires `prompt -> json attendu` pour le fine-tuning LoRA.
+* **`data/test_dataset.jsonl` (859 Ko)** : Jeu de test indépendant utilisé par `finetune_lora.py` pour valider la convergence de la Loss sans data leakage.
+* **`data/chia_pdfs/`** : Corpus des protocoles PDF originaux utilisés pour tester l'extraction end-to-end.
+
+### 2. Emplacement et Cycle de Vie des Modèles IA
+
+Afin de respecter les principes FinOps et GreenOps de l'Architecte IA, les poids des modèles ne sont pas dupliqués inutilement :
+
+| Modèle | Source Officielle (Cloud) | Emplacement Local / Inférence | Poids | Rôle & Type |
+| :--- | :--- | :--- | :---: | :--- |
+| **BioBERT** | [Hugging Face Hub](https://huggingface.co/dmis-lab/biobert-v1.1) (`dmis-lab/biobert-v1.1`) | Cache local Hugging Face (`~/.cache/huggingface/hub/`) | **~400 Mo** | Bi-Encoder pur sur CPU (Embeddings 768d pour `pgvector`) |
+| **Qwen2.5-7B Base** | [Hugging Face Hub](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) (`Qwen/Qwen2.5-7B-Instruct`) | Cache local ou VRAM GPU (chargé par `vLLM` ou `transformers`) | **~15 Go** | Modèle de fondation gelé (*Frozen Backbone*) |
+| **Qwen LoRA (Votre modèle)** | 1. [Hugging Face Hub](https://huggingface.co/Elkristobal59/qwen-7b-chia-ner)<br>2. **AWS S3** (`s3://cliner-mlops/models_lora/`) | Dossier local du repo :<br>[models/qwen_7b_lora_retrained/](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/models/qwen_7b_lora_retrained) | **~84 Mo** | Adaptateur médical entraîné sur CHIA ($r=16, \alpha=32$) |
+
+> 💡 **Le Ratio FinOps Clé :** Lors d'un réentraînement automatique, nous ne transférons ni ne sauvegardons les **15 Go** du modèle complet. Seuls les **84 Mo** de l'adaptateur LoRA sont produits, versionnés sur AWS S3 et référencés dans MLflow.
+
+---
+
+## ⚡ Moteur d'Inférence Haute Performance : vLLM & PagedAttention
+
+L'API Backend FastAPI (`api/main.py`) embarque nativement le moteur d'inférence de pointe **vLLM** optimisé pour les cartes Nvidia en production :
+
+1. **Élimination de la fragmentation mémoire (PagedAttention) :**
+   * Contrairement aux bibliothèques classiques où la mémoire vidéo est pré-allouée de manière contiguë (provoquant jusqu'à 60% de VRAM gaspillée), `vLLM` gère la mémoire KV-Cache comme la mémoire virtuelle d'un OS (par blocs paginés).
+   * **Gain :** Débit d'inférence accéléré d'un facteur **x2 à x5**, avec 85% de la VRAM GPU T4 allouée dynamiquement.
+2. **Support Dynamique des Adaptateurs LoRA (`LoRARequest`) :**
+   * Le serveur charge le backbone Qwen-7B une seule fois, puis greffe dynamiquement l'adaptateur médical à chaud :
+     ```python
+     lora_req = LoRARequest("chia_ner", 1, "Elkristobal59/qwen-7b-chia-ner")
+     outputs = qwen_model.generate([text_prompt], sampling_params, lora_request=lora_req)
+     ```
+3. **Dual-Mode avec Résilience Automatique :**
+   * Si un GPU CUDA est détecté $\rightarrow$ Activation automatique de `vLLM` avec `enable_lora=True`.
+   * Si exécution sur CPU ou en environnement restreint $\rightarrow$ Fallback automatique et transparent sur Hugging Face `transformers` + `peft.PeftModel`.
+
+---
+
+## 🏛️ Infrastructure as Code (IaC) : Terraform pour Supabase & pgvector
+
+Le dossier [terraform/](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/terraform) matérialise l'approche industrielle DevSecOps en provisionnant l'infrastructure de données de manière déclarative et reproductible :
+
+* **Fichiers de configuration :**
+  * [`terraform/main.tf`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/terraform/main.tf) : Déclaration du provider `postgresql` connecté à Supabase en SSL strict (`sslmode=require`).
+  * Activation déclarative de l'extension `vector` (`resource "postgresql_extension" "pgvector"`).
+  * [`terraform/schema.sql`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/terraform/schema.sql) : Création automatisée de la table d'ingestion vectorielle `clinical_trials_data_biobert` (colonne `embedding vector(768)`) et de la table de cache d'inférence `clinical_ner_cache`.
+* **Commandes de déploiement IaC :**
+  ```powershell
+  cd terraform
+  terraform init
+  terraform apply -var="supabase_db_url=$env:SUPABASE_DATABASE_URL"
+  ```
+  Cette démarche garantit que n'importe quel environnement de staging ou de production peut être reconstruit en **moins de 30 secondes**.
+
+---
+
 ## 🔐 Configuration des Identifiants & Fichier `.env`
 
 Le fichier local [`.env`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/.env) (sécurisé dans `.gitignore`) centralise les accès de production :
