@@ -32,6 +32,12 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F821 --show-source --statistics --exclude=.git,__pycache__,docs,data,models,scripts,_scratch_scripts
 
       - name: 🧪 Run MLOps Continuous Training Pipeline (Simulation & Quality Gate)
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'eu-west-3' }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME || 'cliner-mlops' }}
         run: |
           python 07_mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
 
@@ -49,3 +55,25 @@ jobs:
       - name: 🐳 Docker Build MLOps Retraining Worker
         run: |
           docker build -t cliner-mlops-worker:latest 07_mlops_reentrainement/
+
+      - name: 🔐 Login to Docker Hub (if configured)
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        if: env.DH_USER != '' && env.DH_TOKEN != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🚀 Push Images to Docker Hub (if authenticated)
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        if: env.DH_USER != '' && env.DH_TOKEN != ''
+        run: |
+          docker tag cliner-frontend:latest ${{ secrets.DOCKERHUB_USERNAME }}/cliner-frontend:latest
+          docker tag cliner-mlops-worker:latest ${{ secrets.DOCKERHUB_USERNAME }}/cliner-mlops-worker:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/cliner-frontend:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/cliner-mlops-worker:latest
+
