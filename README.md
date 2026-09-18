@@ -371,11 +371,30 @@ uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
 Le serveur est accessible en direct à l'adresse officielle :  
 👉 **[`https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app`](https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app/#/experiments/2)**
 
-### 6. Lancer l'Interface Web Streamlit
+### 6. Lancer et Déployer l'Interface Web Streamlit
+
+#### A. Exécution Locale
 ```powershell
 streamlit run app/streamlit_app.py
 ```
-* **Application Web** : Accessible sur [`http://localhost:8501`](http://localhost:8501).
+* **Application Web Locale** : Accessible sur [`http://localhost:8501`](http://localhost:8501).
+
+#### B. Déploiement Cloud sur Render (Web Service Docker)
+L'interface client est entièrement dockerisée via [`Dockerfile`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/Dockerfile) et [`requirements-frontend.txt`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/requirements-frontend.txt) (sans dépendances GPU lourdes pour un démarrage ultra-rapide) :
+1. **Créer un Web Service** sur Render connecté au dépôt GitHub `Elkristobal59/cliner-mlops`.
+2. **Configuration du runtime** : Choisir l'environnement **Docker** (détecte automatiquement le `Dockerfile` à la racine).
+3. **Variables d'environnement indispensables sur Render** :
+   * `PORT` = `8501` (Routage du trafic entrant vers Streamlit).
+   * `STREAMLIT_SERVER_FILE_WATCHER_TYPE` = `none` (Prévention de l'erreur système inotify sur conteneur Linux).
+   * `STREAMLIT_SERVER_HEADLESS` = `true`
+   * `STREAMLIT_SERVER_ENABLE_CORS` = `false`
+   * `BACKEND_API_URL` = `http://localhost:8000` (ou URL du backend actif).
+
+#### C. Connectivité Multi-Cibles du Backend Inférence
+L'application intègre une détection dynamique multi-environnements. La barre latérale permet de basculer à la volée entre les différents serveurs de calcul sans aucun redéploiement :
+* **Cible 1 (AWS EC2 GPU)** : `http://<IP_PUBLIQUE_EC2>:8000` (Instance de production `g4dn.xlarge` pilotée par `ec2_manager.py`).
+* **Cible 2 (Lightning.ai GPU Studio)** : `https://<STUDIO_ID>-8000.lightning.ai` (Alternative Cloud managée haute performance avec port 8000 exposé).
+* **Cible 3 (Environnement Local / Pont Tunnel)** : `http://localhost:8000` ou tunnel sécurisé (Ngrok / LocalTunnel).
 
 ---
 
