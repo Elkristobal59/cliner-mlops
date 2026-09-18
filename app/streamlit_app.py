@@ -364,20 +364,23 @@ st.markdown(
 
 # Titre supprimé : redondant avec la bannière CliNER ci-dessus.
 
-st.sidebar.title("🫀 CliNER")
-st.sidebar.markdown("*AI-Powered Medical Intelligence & End-to-End Clinical Named Entity Recognition engine.*")
-st.sidebar.markdown("**Projet Jedha - Bootcamp AIFS01**")
+st.sidebar.title("🫀 CliNER-MLOps")
+st.sidebar.markdown("*Enterprise Clinical Named Entity Recognition & LLMOps Platform*")
+st.sidebar.markdown("👨‍💻 **Lead Architecte IA & MLOps :** Christopher Gilleron")
+st.sidebar.caption("Co-conception clinique initiale : P. Mouliom, J. Becker, A. Hoarau, K. Atebata")
 st.sidebar.markdown("---")
-st.sidebar.subheader("👨‍💻 L'Équipe")
-st.sidebar.markdown("Patrick Mouliom, Christopher Gilleron, Jérémie Becker, Arnaud Hoarau, Karim Atebata")
+st.sidebar.header("Architecture & Stack (v10)")
+st.sidebar.metric(label="Serveur Inférence", value="vLLM / AWS EC2 (g4dn.xlarge)")
+st.sidebar.metric(label="Moteurs (NER & RAG)", value="Qwen 2.5 7B LoRA + BioBERT")
+st.sidebar.metric(label="Data Lake & Storage", value="AWS S3 (cliner-mlops)")
+st.sidebar.metric(label="Vector Store & Cache", value="Supabase pgvector (HNSW)")
+st.sidebar.metric(label="IaC & Provisioning", value="Terraform (<30s)")
+st.sidebar.metric(label="Quality Gate CI/CD", value="PyTest (9/9 validés)")
+st.sidebar.metric(label="Observabilité & Drift", value="MLflow (Cloud Run)")
+st.sidebar.markdown("[📊 **Ouvrir le Dashboard MLflow Cloud**](https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app/#/experiments/2)")
 st.sidebar.markdown("---")
-st.sidebar.header("Architecture & Stack")
-st.sidebar.metric(label="Serveur Inférence", value="AWS EC2 (g4dn.xlarge GPU)")
-st.sidebar.metric(label="Moteurs (NER & RAG)", value="Qwen 2.5 7B + BioBERT")
-st.sidebar.metric(label="Stockage Durable", value="Supabase (Postgres & S3)")
-st.sidebar.metric(label="MLOps & Tracking", value="MLflow")
 api_url = st.sidebar.text_input(
-    "URL du FastAPI Orchestrateur (AWS EC2 / Cloud):",
+    "URL Backend Inférence (AWS EC2 / Lightning.ai / Local):",
     value=os.getenv("BACKEND_API_URL", os.getenv("LIGHTNING_AI_API_URL", "http://localhost:8000")),
     key="api_url_input")
 if st.session_state.api_url_input:
@@ -989,8 +992,8 @@ with tab4:
 # --------------------------------------------------------------------------- #
 st.markdown(
     "<div class='cliner-footer'>"
-    "<b>CliNER</b> · AI-Powered Medical Intelligence — Projet Jedha Bootcamp AIFS01<br>"
-    "Patrick Mouliom · Christopher Gilleron · Jérémie Becker · Arnaud Hoarau · Karim Atebata"
+    "<b>CliNER-MLOps</b> · Enterprise Medical Intelligence & LLMOps Engine<br>"
+    "Christopher Gilleron · Lead Architecte IA & MLOps (Co-auteurs projet clinique initial : P. Mouliom, J. Becker, A. Hoarau, K. Atebata)"
     "</div>",
     unsafe_allow_html=True)
 
