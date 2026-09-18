@@ -25,6 +25,13 @@ import json
 import argparse
 from typing import Dict, Any
 
+# Reconfigure stdout for Windows cp1252 terminals
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # MLflow tracking
 try:
     import mlflow

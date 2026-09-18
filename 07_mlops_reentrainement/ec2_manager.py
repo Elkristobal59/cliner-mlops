@@ -22,6 +22,13 @@ import time
 import argparse
 from typing import Dict, Any, Optional
 
+# Reconfigure stdout for Windows cp1252 terminals
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 try:
     import boto3
     from botocore.exceptions import ClientError, NoCredentialsError
