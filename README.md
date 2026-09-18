@@ -89,3 +89,55 @@ Pour garantir la pérennité et la conformité RNCP 41993 (Niveau 7) de notre so
 - **Scalabilité Cloud** : Architecture distribuée pour l'ingestion massive d'essais cliniques mondiaux.
 - **Modèles SLM** : Fine-tuning d'un petit modèle (Small Language Model) spécialisé pour réduire considérablement les coûts d'inférence en production.
 - **Auto-suppression Supabase (TTL / CRON)** : Routines de purge automatique pour effacer régulièrement les PDF temporaires stockés dans le Cloud, afin d'optimiser les coûts de stockage et de garantir la conformité RGPD.
+
+---
+
+## ☁️ Guide de Configuration Cloud AWS & GitHub Actions
+
+Pour reproduire ou auditer l'infrastructure complète du projet :
+
+### 1. IAM & Droits d'Accès
+- **Utilisateur :** `github-actions-cliner-mlops`
+- **Politiques attachées :** `AmazonEC2FullAccess` et `AmazonS3FullAccess`
+- **Clés :** `AWS_ACCESS_KEY_ID` et `AWS_SECRET_ACCESS_KEY`
+
+### 2. AWS S3 (Data Lake & Model Registry)
+- **Bucket :** `cliner-clinical-storage-<unique>` (Région `eu-west-3` Paris)
+- **Structure :**
+  - `clinical_pdfs/` (protocoles cliniques bruts volumineux)
+  - `datasets/` (`train_dataset.jsonl` et `test_dataset.jsonl`)
+  - `models_lora/` (checkpoints des adaptateurs LoRA réentraînés ~84 Mo)
+
+### 3. Instance EC2 GPU (`g4dn.xlarge`)
+- **AMI :** `Deep Learning OSS Nvidia Driver AMI GPU PyTorch (Ubuntu 22.04)`
+- **Type :** `g4dn.xlarge` (1x GPU NVIDIA Tesla T4 16 Go VRAM, 4 vCPU, 16 Go RAM)
+- **Stockage EBS :** 60 Go (`gp3`)
+- **Security Group (`cliner-ec2-sg`) :** Port 22 (SSH), Port 8000 (FastAPI), Port 5000 (MLflow)
+
+### 4. Secrets GitHub Actions (6 Variables)
+Dans **Settings** ➔ **Secrets and variables** ➔ **Actions** :
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (`eu-west-3`), `AWS_EC2_GPU_INSTANCE_ID`, `S3_BUCKET_NAME`, `SUPABASE_DATABASE_URL`.
+
+### 5. Workflows CI/CD Automatisés
+- **`ci_mlops.yml`** (Déclenchement automatique à chaque push) : Linting Flake8, simulation MLOps et build Docker.
+- **`deploy_ec2_autokill.yml`** (Déclenchement manuel pour démo/soutenance) : Démarre l'EC2 GPU, active un minuteur de démo (15 à 60 min), et déclenche **l'Auto-Kill FinOps** automatique à l'issue de la session.
+
+---
+
+## 🎓 FAQ & Arguments Clés pour la Soutenance (RNCP 41993 - Bloc 4)
+
+### Q1 : Pourquoi une architecture hybride AWS S3 + Supabase pgvector ? Pourquoi pas 100% S3 ?
+* **AWS S3 = Data Lake & Model Registry :** Stockage passif illimité et économique (~0,02 $/Go/mois) pour les données volumineuses (PDFs de 100 pages, datasets, adaptateurs LoRA ~84 Mo).
+* **Supabase (pgvector) = Moteur Vectoriel & Base Opérationnelle :** S3 ne sait pas faire de calcul vectoriel mathématique. PostgreSQL `pgvector` calcule la similarité cosinus (`<=>`) en 12 millisecondes et offre un cache d'inférence (`clinical_ner_cache`) répondant en 0,01s. Remplacer Supabase par S3 ferait bondir la latence de **15 ms à plus de 25 secondes** (obligation de tout recalculer en RAM Python à chaque question).
+
+### Q2 : Pourquoi ne pas réentraîner Qwen-7B tous les jours sur un CRON ?
+Réentraîner un LLM de 7 milliards de paramètres à l'aveugle sur planification chronologique est une faute d'architecture FinOps et GreenOps. Nous appliquons un **réentraînement événementiel conditionné** :
+- BioBERT mesure la distance de **Wasserstein** sur la distribution d'embeddings.
+- Si et seulement si $W > 0.15$ (ou si 100 nouvelles corrections médicales sont validées), le pipeline MLOps allume le GPU EC2, réentraîne uniquement les matrices LoRA légères (84 Mo, ~20 min de calcul), puis éteint immédiatement l'instance (Auto-Kill).
+
+### Q3 : Quel est le cloisonnement avec le projet CDSD (`clinicalapp`) ?
+Les deux projets sont **strictement étanches** :
+- **CDSD** (`clinicalapp`) : centré sur l'applicatif Data Science (Streamlit, FastAPI, premier modèle de base).
+- **Lead AI RNCP 41993** (`cliner-mlops`) : centré sur l'ingénierie système (migration Full AWS EC2 GPU, S3 Data Lake, Continuous Training sur dérive Wasserstein, CI/CD GitHub Actions, FinOps Auto-Kill).
+- Dépôts Git distincts, dossiers locaux distincts, et lecture seule non destructrice sur la base Supabase.
+
