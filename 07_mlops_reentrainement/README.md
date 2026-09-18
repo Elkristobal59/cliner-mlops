@@ -23,7 +23,7 @@
 
 ---
 
-## 🎯 Pourquoi cette Architecture est Idéale pour le Jury
+## 🎯 Pourquoi cette Architecture est Idéale
 
 1. **Pas de Réentraînement Chronologique Aveugle (FinOps / GreenOps) :**  
    Au lieu de faire tourner une carte graphique à 10 000 € toutes les nuits, le système commence par `drift_detection.py`. Si les données n'ont pas bougé, **l'instance GPU reste éteinte**.
