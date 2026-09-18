@@ -50,9 +50,14 @@ Le projet isole strictement ses responsabilités entre trois briques de services
 - **Supabase (Base Opérationnelle & Vectorielle pgvector)** :
   - `SUPABASE_DATABASE_URL` : Chaîne PostgreSQL vers le pooler Supabase (port `6543`).
   - Gère les requêtes temps réel : indexation vectorielle `pgvector` des embeddings BioBERT (768d), recherche par similarité cosinus (`<=>`) en 12 ms, et cache chirurgical `clinical_ner_cache` (0.01s).
-- **MLflow (Monitoring & Model Registry)** :
-  - Fonctionne par défaut en local sans aucun coût via SQLite embarqué (`sqlite:///mlflow.db`).
-  - Enregistre les métriques de dérive, les hyperparamètres LoRA ($r=16, \alpha=32$, lr=$2\times 10^{-4}$) et les courbes de Loss.
+- **MLflow Tracking & Model Registry (Architecture Hybride & Full Cloud GCP Cloud Run)** :
+  - **En local** : Fonctionne sans configuration via SQLite embarqué (`sqlite:///mlflow.db`).
+  - **En Full Cloud (Google Cloud Run Serverless)** :
+    - Déployé en tant que conteneur managé Serverless via `ghcr.io/mlflow/mlflow:v2.21.3` sur le port `8080`.
+    - **FinOps Scale-to-Zero** : `min-instances=0` (coût = 0.00 € dès qu'aucun run ou utilisateur n'interroge le dashboard) et `max-instances=2`.
+    - **Backend Store persistant** : Connecté à PostgreSQL Supabase (`SUPABASE_DATABASE_URL`) pour pérenniser l'historique des runs, hyperparamètres et métriques même quand le conteneur s'éteint.
+    - **Artifact Store Cloud** : Connecté au bucket AWS S3 (`s3://cliner-clinical-storage-dev/mlflow_artifacts/`) ou GCS.
+    - **Variable de connexion** : `MLFLOW_TRACKING_URI="https://<VOTRE_SERVICE_MLFLOW>.a.run.app"`. L'API FastAPI et le script de réentraînement LoRA y envoient directement leurs logs en HTTPS.
 
 **3. Lancement du Backend Inférence & Monitoring (AWS EC2 GPU / Docker)**
 

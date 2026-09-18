@@ -62,6 +62,9 @@ def run_lora_finetuning(
     # Initialisation MLflow
     if mlflow:
         try:
+            tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+            if tracking_uri:
+                mlflow.set_tracking_uri(tracking_uri)
             mlflow.set_experiment("CliNER_Continuous_Training_LoRA")
         except Exception:
             pass

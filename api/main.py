@@ -118,8 +118,12 @@ async def startup_event():
     
     # 📊 MONITORING MLOPS AVEC MLFLOW
     print("Configuration MLflow...")
-    db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mlflow.db"))
-    mlflow.set_tracking_uri(f"sqlite:///{db_path}")
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    if not tracking_uri:
+        db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mlflow.db"))
+        tracking_uri = f"sqlite:///{db_path}"
+    mlflow.set_tracking_uri(tracking_uri)
+    print(f"MLflow Tracking URI configuré sur : {tracking_uri}")
     mlflow.set_experiment("Clinical_Trials_Extraction") # Tous nos logs iront dans cette "boîte"
     
     print("✅ Serveur Prêt. L'API est en ligne !")
