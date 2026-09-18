@@ -28,10 +28,29 @@ Sur des architectures locales (Open-Source), le passage à l'échelle se ferait 
 Envoyer un protocole clinique complet (qui fait parfois 50 à 100 pages) dans le *prompt* d'un LLM coûte très cher en puissance de calcul (explosion de la VRAM due à la fenêtre de contexte) et provoque un phénomène de "Lost in the middle" (le LLM oublie l'information au milieu du texte).
 Le système **RAG avec BioBERT et Supabase (pgvector)** permet de filtrer intelligemment l'information : on ne transmet à Qwen que les paragraphes strictement pertinents (ex: critères d'inclusion), ce qui rend le processus instantané, moins coûteux et beaucoup plus précis.
 
-### Q : Pourquoi utilisez-vous Supabase (PostgreSQL) et comment gérez-vous le stockage des PDF ?
+### Q : Pourquoi une architecture hybride AWS S3 + Supabase (PostgreSQL pgvector) ? Pourquoi ne pas tout mettre sur S3 ?
 **Réponse :**
-* **Pour les vecteurs :** PostgreSQL via l'extension `pgvector` est parfait pour stocker les "chunks" et leurs embeddings, permettant une recherche de similarité cosinus ultra-rapide. Cela nous sert aussi de **système de Cache** : si un protocole a déjà été analysé, on affiche instantanément le résultat (0,1s) sans solliciter le GPU.
-* **Pour les PDFs :** Les PDFs sont uploadés temporairement sur un **S3 Bucket (Supabase Storage)**. Notre perspective d'évolution est de mettre en place une routine **CRON (auto-suppression / TTL)** pour purger ces fichiers bruts de l'espace de stockage afin de maîtriser nos coûts Cloud et garantir une conformité stricte au RGPD.
+Dans une architecture de niveau production (Lead AI / RNCP 41993), il est fondamental de dissocier le **Stockage Objet (Data Lake)** du **Moteur Vectoriel & Base Opérationnelle** :
+1. **Ce que S3 fait (Data Lake & Model Registry) :**
+   * Stockage massif, illimité et économique (~0,02 $/Go/mois) pour les données lourdes : les protocoles PDF bruts complets (100 pages chacun), les jeux de données annotés CHIA (`.jsonl`), les checkpoints d'adaptateurs LoRA réentraînés (~84 Mo par version) et les logs/artefacts MLflow.
+   * Cela évite de saturer le quota gratuit de 1 Go du stockage Supabase.
+2. **Ce que Supabase (PostgreSQL + `pgvector`) est le seul à pouvoir faire (Base Opérationnelle temps réel) :**
+   * **Recherche vectorielle mathématique native :** S3 est un stockage passif incapable de calculer un produit scalaire ou une distance cosinus (`ORDER BY embedding <=> %s::vector LIMIT 5`). Si on utilisait S3 pour le RAG, l'API devrait télécharger les fichiers en local et calculer les distances en RAM Python à chaque requête, ce qui ferait exploser la latence de **15 millisecondes à plus de 25 secondes** !
+   * **Cache d'inférence instantané (`clinical_ner_cache`) :** Recherche par index B-tree en 0,01s qui court-circuite tout calcul GPU coûteux si l'étude a déjà été extraite.
+   * **Transactions relationnelles ACID :** Gestion multi-utilisateurs concurrente et recueil des feedbacks médicaux pour surveiller la dérive conceptuelle.
+
+### Q : Pourquoi être passé sur AWS EC2 (GPU `g4dn.xlarge`) avec Auto-Kill au lieu de Lightning AI ?
+**Réponse :**
+* **Souveraineté & Dépendance Réseau :** Lightning AI Studio nécessitait un tunnel réseau instable (`localtunnel` ou `ngrok`) pour exposer les ports vers le frontend, avec des coupures aléatoires et des IP changeantes.
+* **Standardisation Cloud Entreprise :** Déployer sur AWS EC2 dans un VPC privé avec des Security Groups stricts répond aux standards réels des entreprises et aux exigences du titre Architecte IA.
+* **Gestion FinOps Stricte :** Grâce à notre module Python `boto3` ([ec2_manager.py](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/07_mlops_reentrainement/ec2_manager.py)) et à notre workflow GitHub Actions ([deploy_ec2_autokill.yml](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/.github/workflows/deploy_ec2_autokill.yml)), la machine GPU n'est allumée qu'à la demande et s'éteint automatiquement (Auto-Kill) après 45 minutes de démo ou à la fin du réentraînement LoRA. Coût résiduel = 0,00 €.
+
+### Q : Quelle est la différence et le cloisonnement entre ce projet et votre projet Fullstack CDSD (`clinicalapp`) ?
+**Réponse :**
+* **Deux périmètres académiques distincts :**
+  - Le projet **CDSD** (`clinicalapp` sur `d:\AIFS01\PROJET FINAL\stack_equipe`) visait la conception applicative Data Science Fullstack (FastAPI, Streamlit, première extraction NER).
+  - Le projet **Lead AI RNCP 41993** (`cliner-mlops` sur `d:\AIL-FT-02\CERTIF AIL\cliner-mlops`) est centré sur l'ingénierie système et le MLOps : migration Full AWS (EC2 GPU, S3), pipeline automatisé de Continuous Training avec détection de dérive statistique Wasserstein sur embeddings BioBERT, gouvernance FinOps Auto-Kill et CI/CD Quality Gate.
+* **Étanchéité technique totale :** Deux dépôts Git isolés, aucun fichier commun écrasé, et non-régression garantie sur la base Supabase qui n'est consultée qu'en lecture pour les embeddings de référence.
 
 ---
 
