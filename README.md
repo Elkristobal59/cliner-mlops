@@ -186,6 +186,39 @@ La consultation vectorielle s'exécute de manière optimisée en cascade :
 
 ---
 
+### 4. Deux Modes de RAG sur le Même Index Vectoriel : Extraction Structurée (NER) vs Chatbot Conversationnel
+
+Une force majeure de l'architecture est la mutualisation de l'index vectoriel Supabase `clinical_trials_data_biobert` pour deux cas d'usage clinique complémentaires :
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                 MUTUALISATION DE L'INDEX VECTORIEL UNIQUE POUR DEUX CAS D'USAGE                  │
+│                                                                                                  │
+│                     🗄️ INDEX VECTORIEL SUPABASE (clinical_trials_data_biobert)                   │
+│                                   (Embeddings BioBERT 768d)                                      │
+│                                       │                     │                                    │
+│                 ┌─────────────────────┘                     └─────────────────────┐              │
+│                 ▼                                                                 ▼              │
+│   🏷️ ONGLET 3 : EXTRACTION STRUCTURÉE (NER)                         💬 ONGLET 4 : CHATBOT RAG    │
+│   • Pattern : Retrieval-Augmented NER                               • Pattern : Conversational   │
+│   • Modèle : Qwen-7B LoRA (Elkristobal59/qwen-7b-chia-ner)          • Modèle : Qwen-7B Base      │
+│   • Objectif : Filtrer 98% du document pour isoler les 5 chunks     • Objectif : Poser une       │
+│     d'éligibilité et générer le JSON strict (Condition, Drug, etc.)   question libre en français │
+│   • Format de sortie : JSON standardisé CHIA (3s au lieu de 4 min)  • Format : Réponse rédigée   │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Onglet 3 (Extraction NER) — Le Retrieval-Augmented NER :**
+   * **Pourquoi le NER intervient après la recherche vectorielle et non juste après l'embedding ?**  
+     Un protocole de 50 pages compte environ 80 chunks. Si le NER était appliqué sur chaque chunk, le GPU exécuterait 80 inférences séquentielles (**plus de 4 minutes d'attente pour le médecin !**) et traiterait inutilement des pages administratives ou légales. En effectuant la recherche sémantique en amont (12 ms), Qwen LoRA n'analyse que les **5 chunks pertinents**, ramenant le temps d'extraction à **3 secondes chrono avec zéro hallucination**.
+   * **Format de sortie :** Tableau JSON médical strict (`Condition`, `Drug`, `Procedure`, `Measurement`, `Value`).
+2. **Onglet 4 (Chatbot Conversationnel RAG) — La Synthèse Clinique Contextuelle :**
+   * **Rôle :** Permet au praticien de poser des questions ouvertes en langage naturel (*ex : « Quelles sont les contre-indications cardiaques pour cet essai ? »*).
+   * **Fonctionnement :** La question du médecin est vectorisée par BioBERT, les 15 extraits les plus pertinents sont isolés, et le modèle formule une **synthèse médicale fluide en français**, avec citation explicite des sections sources.
+   * **Traçabilité :** Décoré avec `@mlflow.trace(name="RAG_Chatbot", span_type="CHAIN")`, chaque échange est tracé en direct sur Google Cloud Run.
+
+---
+
 ## 📦 Données & Modèles : Cartographie et Stockage Décentralisé
 
 ### 1. Le Dataset Clinique de Référence (Gold CHIA dans `data/`)
