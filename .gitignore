@@ -26,3 +26,4 @@ data/
 !requirements_*.txt
 _scripts/
 scripts/
+audit_aws_*.py
