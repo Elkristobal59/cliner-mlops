@@ -1,6 +1,6 @@
 # 🔁 Module MLOps : Pipeline Automatisé de Dérive & Réentraînement LoRA
 
-> **Dossier :** `07_mlops_reentrainement/`  
+> **Dossier :** `mlops_reentrainement/`  
 > **Projet :** **CliNER-MLOPS**  
 > **Composants :** Continuous Training, FinOps AWS EC2, Détection de Dérive Sémantique & Versionnage S3 / MLflow
 
@@ -9,7 +9,7 @@
 ## 🏗️ Architecture du Module
 
 ```
-07_mlops_reentrainement/
+mlops_reentrainement/
 ├── drift_detection.py      -> mesure le drift sur les embeddings (décide s'il faut ré-entraîner)
 ├── finetune_lora.py        -> ré-entraîne l'adaptateur LoRA (QLoRA) sur Qwen 7B
 ├── ec2_manager.py          -> allume / éteint l'instance EC2 GPU (boto3)
@@ -42,18 +42,18 @@ tests/
 
 ### 1. Tester le Détecteur de Dérive Seul
 ```bash
-python 07_mlops_reentrainement/drift_detection.py --threshold 0.15
+python mlops_reentrainement/drift_detection.py --threshold 0.15
 ```
 
 ### 2. Tester le Gestionnaire FinOps EC2 (Simulation)
 ```bash
-python 07_mlops_reentrainement/ec2_manager.py --action start --dry-run
-python 07_mlops_reentrainement/ec2_manager.py --action stop  --dry-run
+python mlops_reentrainement/ec2_manager.py --action start --dry-run
+python mlops_reentrainement/ec2_manager.py --action stop  --dry-run
 ```
 
 ### 3. Lancer l'Orchestrateur Complet (Mode Simulé End-to-End)
 ```bash
-python 07_mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
+python mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
 ```
 
 ### 4. Lancer la Suite de Tests PyTest

@@ -38,7 +38,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'eu-west-3' }}
           AWS_EC2_GPU_INSTANCE_ID: ${{ secrets.AWS_EC2_GPU_INSTANCE_ID }}
         run: |
-          python 07_mlops_reentrainement/ec2_manager.py --action start --instance-id "${AWS_EC2_GPU_INSTANCE_ID}"
+          python mlops_reentrainement/ec2_manager.py --action start --instance-id "${AWS_EC2_GPU_INSTANCE_ID}"
 
       - name: 📢 Announce Demo Session Running
         run: |
@@ -64,5 +64,5 @@ jobs:
           AWS_EC2_GPU_INSTANCE_ID: ${{ secrets.AWS_EC2_GPU_INSTANCE_ID }}
         run: |
           echo "🛑 Déclenchement de l'arrêt de sécurité FinOps..."
-          python 07_mlops_reentrainement/ec2_manager.py --action stop --instance-id "${AWS_EC2_GPU_INSTANCE_ID}"
+          python mlops_reentrainement/ec2_manager.py --action stop --instance-id "${AWS_EC2_GPU_INSTANCE_ID}"
           echo "🔒 Instance éteinte avec succès. Zéro facturation résiduelle."

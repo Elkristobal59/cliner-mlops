@@ -352,16 +352,6 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True)
 
-# Barre de KPIs (badges statiques sous la bannière)
-st.markdown(
-    "<div class='cliner-kpis'>"
-    "<span><b>58.3%</b><br>F1-Score (CHIA)</span>"
-    "<span><b>63%</b><br>Précision</span>"
-    "<span><b>75 tok/s</b><br>Inférence GPU</span>"
-    "<span><b>Qwen 7B + LoRA</b><br>Modèle NER</span>"
-    "</div>",
-    unsafe_allow_html=True)
-
 # Titre supprimé : redondant avec la bannière CliNER ci-dessus.
 
 st.sidebar.title("🫀 CliNER-MLOps")

@@ -19,7 +19,7 @@ import numpy as np
 
 # Résolution des chemins pour imports propres
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MLOPS_DIR = PROJECT_ROOT / "07_mlops_reentrainement"
+MLOPS_DIR = PROJECT_ROOT / "mlops_reentrainement"
 if str(MLOPS_DIR) not in sys.path:
     sys.path.insert(0, str(MLOPS_DIR))
 if str(PROJECT_ROOT) not in sys.path:

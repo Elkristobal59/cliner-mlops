@@ -43,7 +43,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'eu-west-3' }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME || 'cliner-mlops' }}
         run: |
-          python 07_mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
+          python mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
 
   docker-build:
     needs: test-and-lint
@@ -58,7 +58,7 @@ jobs:
 
       - name: 🐳 Docker Build MLOps Retraining Worker
         run: |
-          docker build -t cliner-mlops-worker:latest 07_mlops_reentrainement/
+          docker build -t cliner-mlops-worker:latest mlops_reentrainement/
 
       - name: 🔐 Login to Docker Hub (if configured)
         env:

@@ -39,4 +39,4 @@ jobs:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
         run: |
-          python 07_mlops_reentrainement/run_pipeline.py --dry-run --threshold 0.15
+          python mlops_reentrainement/run_pipeline.py --dry-run --threshold 0.15

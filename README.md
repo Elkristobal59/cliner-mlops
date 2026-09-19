@@ -328,31 +328,31 @@ Lance la simulation complète (Drift Wasserstein $\rightarrow$ Démarrage EC2 $\
 
 ```powershell
 cd "d:\AIL-FT-02\CERTIF AIL\cliner-mlops"
-python 07_mlops_reentrainement/run_pipeline.py --dry-run
+python mlops_reentrainement/run_pipeline.py --dry-run
 ```
 
 *Variantes de démonstration :*
 ```powershell
 # Forcer le réentraînement même si la distribution est stable :
-python 07_mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
+python mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
 
 # Abaisser le seuil d'alerte pour déclencher le drift :
-python 07_mlops_reentrainement/run_pipeline.py --dry-run --threshold 0.05
+python mlops_reentrainement/run_pipeline.py --dry-run --threshold 0.05
 ```
 
 ### 2. Tester chaque brique MLOps unitairement
 ```powershell
 # Brique 1 : Test statistique de Dérive Sémantique
-python 07_mlops_reentrainement/drift_detection.py
+python mlops_reentrainement/drift_detection.py
 
 # Brique 2 : Contrôleur FinOps EC2 (Boto3)
-python 07_mlops_reentrainement/ec2_manager.py --dry-run --action status
+python mlops_reentrainement/ec2_manager.py --dry-run --action status
 
 # Brique 3 : Moteur de Réentraînement LoRA (Qwen2.5-7B)
-python 07_mlops_reentrainement/finetune_lora.py --dry-run
+python mlops_reentrainement/finetune_lora.py --dry-run
 
 # Brique 4 : Connecteur AWS S3 Data Lake (Bucket cliner-mlops)
-python 07_mlops_reentrainement/s3_storage.py
+python mlops_reentrainement/s3_storage.py
 ```
 
 ### 3. Exécuter la Suite de Tests Automatisés (PyTest - Quality Gate CI/CD)
