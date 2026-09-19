@@ -492,3 +492,11 @@ Les deux projets sont **strictement étanches** :
   - **Supabase pgvector :** Mises à jour idempotentes (`DELETE WHERE doc_id = %s` avant réinsertion) uniquement si une étude est révisée, sans supprimer les autres.
   - **Détection de Dérive (Wasserstein) :** Analyse calculée sur une **fenêtre glissante des 5 derniers protocoles insérés** (`ORDER BY id DESC LIMIT 5`) comparée au Gold Standard CHIA de référence (800 protocoles). Si $W > 0.15 \rightarrow$ Allumage EC2 GPU $\rightarrow$ Fine-Tuning LoRA $\rightarrow$ Auto-Kill immédiat !
 
+### Q7 : Comment est organisée la présentation Demo Day AIL (Format 4 personnes — 8 minutes chrono) ?
+* **Support officiel Widescreen 16:9 :** [`demoday_cliner-mlops.pptx`](demoday_cliner-mlops.pptx) (6 slides vulgarisées).
+* **Format & Répartition :** Exactement **4 orateurs × 2 minutes = 8 minutes chrono** :
+  1. **Orateur 1 (00:00 - 02:00 / Slides 1 & 2)** : Cadrage Stratégique, Paradoxe du recrutement (80% de retards) & Proposition de Valeur CliNER (3s, souverain, zéro hallucination).
+  2. **Orateur 2 (02:00 - 04:00 / Slide 3)** : Démonstration Live commentée de l'application Streamlit (Recherche en direct, extraction NER chirurgicale des critères, Chatbot RAG).
+  3. **Orateur 3 (04:00 - 06:00 / Slide 4)** : Architecture Vulgarisée & Circuit complet de la donnée (Flux médecin BioBERT/Qwen LoRA + Boucle MLOps réentraînement autonome à 0,17 €).
+  4. **Orateur 4 (06:00 - 08:00 / Slides 5 & 6)** : Le Secret du NER (F1 58.3% CHIA, suppression des erreurs critiques), Perspectives (LoRA spécialisés, intégration DPI hospitalier) & Clôture de l'équipe (P. Mouliom, C. Gilleron, A. Hoarau, K. Atebata).
+* **Script complet & trame de discours :** Référencé dans [`SPEECH_DEMODAY_CLINER_MLOPS.md`](SPEECH_DEMODAY_CLINER_MLOPS.md).

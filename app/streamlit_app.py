@@ -366,17 +366,22 @@ st.markdown(
 
 st.sidebar.title("🫀 CliNER-MLOps")
 st.sidebar.markdown("*Enterprise Clinical Named Entity Recognition & LLMOps Platform*")
-st.sidebar.markdown("👨‍💻 **Lead Architecte IA & MLOps :** Christopher Gilleron")
-st.sidebar.caption("Co-conception clinique initiale : P. Mouliom, J. Becker, A. Hoarau, K. Atebata")
+st.sidebar.markdown("👥 **Équipe :** P. Mouliom, A. Hoarau, K. Atebata, C. Gilleron")
 st.sidebar.markdown("---")
-st.sidebar.header("Architecture & Stack (v10)")
+st.sidebar.header("Architecture & Stack")
+st.sidebar.markdown(
+    "[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=flat&logo=githubactions&logoColor=white)](https://github.com) "
+    "[![Cloud Run](https://img.shields.io/badge/Cloud_Run-MLflow-4285F4?style=flat&logo=googlecloud&logoColor=white)](https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app/#/experiments/2) "
+    "[![Render](https://img.shields.io/badge/Render-Web_App-46E3B7?style=flat&logo=render&logoColor=black)](https://render.com)"
+)
 st.sidebar.metric(label="Serveur Inférence", value="vLLM / AWS EC2 (g4dn.xlarge)")
 st.sidebar.metric(label="Moteurs (NER & RAG)", value="Qwen 2.5 7B LoRA + BioBERT")
 st.sidebar.metric(label="Data Lake & Storage", value="AWS S3 (cliner-mlops)")
 st.sidebar.metric(label="Vector Store & Cache", value="Supabase pgvector (HNSW)")
 st.sidebar.metric(label="IaC & Provisioning", value="Terraform (<30s)")
-st.sidebar.metric(label="Quality Gate CI/CD", value="PyTest (9/9 validés)")
-st.sidebar.metric(label="Observabilité & Drift", value="MLflow (Cloud Run)")
+st.sidebar.metric(label="Quality Gate CI/CD", value="PyTest (9/9 validés) · GitHub Actions")
+st.sidebar.metric(label="Hébergement Frontend", value="Render (Docker Web Service)")
+st.sidebar.metric(label="Observabilité & Drift", value="MLflow (Google Cloud Run)")
 st.sidebar.markdown("[📊 **Ouvrir le Dashboard MLflow Cloud**](https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app/#/experiments/2)")
 st.sidebar.markdown("---")
 api_url = st.sidebar.text_input(
@@ -993,7 +998,7 @@ with tab4:
 st.markdown(
     "<div class='cliner-footer'>"
     "<b>CliNER-MLOps</b> · Enterprise Medical Intelligence & LLMOps Engine<br>"
-    "Christopher Gilleron · Lead Architecte IA & MLOps (Co-auteurs projet clinique initial : P. Mouliom, J. Becker, A. Hoarau, K. Atebata)"
+    "Équipe : P. Mouliom · A. Hoarau · K. Atebata · C. Gilleron"
     "</div>",
     unsafe_allow_html=True)
 

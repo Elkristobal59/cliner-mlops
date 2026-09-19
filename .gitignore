@@ -26,3 +26,4 @@ data/
 _scripts/
 scripts/
 audit_aws_*.py
+*_v1fat.pptx
