@@ -88,7 +88,12 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 1. **Surveillance de Dérive Sémantique (`drift_detection.py`)** :
    * Mesure la distance de Wasserstein ($W$) entre les embeddings BioBERT de référence (dataset Gold CHIA) et les 5 derniers protocoles cliniques ingérés.
    * Si $W \le 0.15$ : distribution stable. L'orchestrateur s'arrête immédiatement. **Facture Cloud = 0.00 €**.
-   * Si $W > 0.15$ (ou si le praticien a validé des corrections d'entités) : dérive confirmée $\rightarrow$ déclenchement du cycle de réentraînement.
+   * Si $W > 0.15$ : dérive critique détectée $\rightarrow$ déclenchement du cycle de réentraînement.
+   
+   > 💡 **Précision d'Architecture MLOps — Pourquoi Wasserstein et non le F1-Score en production ?**  
+   > * **Absence de Vérité Terrain en Direct (*Data Drift* non supervisé) :** Les nouveaux protocoles médicaux qui arrivent de l'hôpital ou de ClinicalTrials.gov sont du texte brut non annoté. Aucun médecin n'est présent pour labelliser chaque token en direct : il est donc **physiquement impossible de calculer un F1-Score en production**. Wasserstein mesure le *Covariate Shift* (dérive des textes d'entrée) dans l'espace BioBERT 768d.
+   > * **Pourquoi 58.3% de F1-Score sur CHIA est un score de référence ?** CHIA est une tâche extrême de NER imbriqué multi-classes (15 catégories médicales strictes : `Condition`, `Drug`, `Procedure`, `Measurement`, `Temporal`, etc.) avec alignement exact de caractères (*exact boundary match*). L'accord inter-annotateurs entre médecins experts tourne autour de **65% à 70%**. Un score F1 strict de **58% à 60%** pour un LLM 7B est un standard très élevé dans la littérature scientifique biomédicale.
+   > * **Qui bouge lors du fine-tuning ?** Le Gold Standard CHIA reste **immuable** (étalon zéro) ; le Data Lake S3 s'enrichit des nouveaux cas validés ; et **seul l'adaptateur LoRA (84 Mo)** est réentraîné sur AWS EC2 pour repositionner ses projections neuronales sans provoquer d'oubli catastrophique.
 2. **Allumage FinOps à la Demande (`ec2_manager.py`)** :
    * L'orchestrateur appelle l'API AWS `ec2:StartInstances` via `boto3`.
    * L'instance GPU `cliner-ec2-gpu` (`g4dn.xlarge`, Nvidia T4) démarre en ~45 secondes.
