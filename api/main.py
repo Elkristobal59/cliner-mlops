@@ -71,6 +71,7 @@ qwen_tokenizer = None
 qwen_model = None
 conn = None
 is_vllm = False
+MEMORY_DOC_CHUNKS = {}  # doc_id -> list of {"text": chunk_text, "emb": embedding}
 
 @app.on_event("startup")
 async def startup_event():
@@ -100,18 +101,30 @@ async def startup_event():
             print(f"Erreur vLLM, fallback transformers: {e}")
             is_vllm = False
             
-    # 🐌 FALLBACK CLASSIC TRANSFORMERS (Si pas de GPU ou erreur vLLM)
+    # ⚡ CHARGEMENT TRANSFORMERS HAUTE PERFORMANCE (4-bit QLoRA)
     if not is_vllm:
-        print("Mode CPU ou Fallback -> Activation de Transformers (avec PeftModel)...")
+        print("Activation de Transformers sur GPU (bitsandbytes 4-bit QLoRA)...")
         from peft import PeftModel
+        from transformers import BitsAndBytesConfig
+        bnb_config = None
+        if torch.cuda.is_available():
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_quant_type="nf4"
+            )
         base_model = AutoModelForCausalLM.from_pretrained(
             QWEN_MODEL, 
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
-        ).to(device)
+            quantization_config=bnb_config,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else None,
+            low_cpu_mem_usage=True
+        )
         try:
             qwen_model = PeftModel.from_pretrained(base_model, "Elkristobal59/qwen-7b-chia-ner")
-        except:
-            print("Adapter not found on HF, using base model")
+            print("✅ Adaptateur LoRA médical greffé avec succès sur Qwen-7B !")
+        except Exception as e:
+            print(f"Adapter not found on HF ({e}), using base model")
             qwen_model = base_model
 
     # 📥 CHARGEMENT DE BIOBERT (Modèle léger)
@@ -119,21 +132,25 @@ async def startup_event():
     biobert_tokenizer = AutoTokenizer.from_pretrained(BIOBERT_MODEL)
     biobert_model = AutoModel.from_pretrained(BIOBERT_MODEL).to(device)
     
-    print("Connexion Supabase (Base Vectorielle)...")
-    conn = psycopg2.connect(SUPABASE_DB_URL)
-    
-    # --- CREATION DE LA TABLE DE CACHE ---
-    with conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS clinical_ner_cache (
-                doc_id TEXT PRIMARY KEY,
-                disease TEXT,
-                extraction TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.commit()
-    print("Table de cache NER prête.")
+    # 🗄️ CONNEXION SUPABASE AVEC TOLÉRANCE AUX PANNES (SRE / Zero-Downtime)
+    try:
+        if SUPABASE_DB_URL:
+            print("Connexion Supabase (Base Vectorielle)...")
+            conn = psycopg2.connect(SUPABASE_DB_URL, connect_timeout=4)
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS clinical_ner_cache (
+                        doc_id TEXT PRIMARY KEY,
+                        disease TEXT,
+                        extraction TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                conn.commit()
+            print("Table de cache NER prête.")
+    except Exception as err_db:
+        print(f"[WARN] Base Supabase en pause ou indisponible ({err_db}). Basculement en mode local résilient.")
+        conn = None
     
     # 📊 MONITORING MLOPS AVEC MLFLOW
     print("Configuration MLflow...")
@@ -173,68 +190,95 @@ def process_extracted_text(text: str, filename: str, disease: str, start_time: f
     """
     cur = None
     try:
-        # --- NOUVEAUTÉ: VÉRIFICATION DU CACHE NER ---
-        cur = conn.cursor()
-        cur.execute("SELECT extraction FROM clinical_ner_cache WHERE doc_id = %s", (filename,))
-        cached_result = cur.fetchone()
-        
-        if cached_result:
-            print(f"⚡ CACHE HIT pour {filename} ! Réponse instantanée en {time.time() - start_time:.2f}s.")
-            cur.close()
-            # On loggue le cache hit dans MLflow
-            with mlflow.start_run():
-                mlflow.log_param("disease", disease)
-                mlflow.log_param("document", filename)
-                mlflow.log_param("cache_hit", True)
-                mlflow.log_metric("latency_sec", time.time() - start_time)
-            return {"status": "success", "disease": disease, "document": filename, "extraction": cached_result[0]}
+        # --- NOUVEAUTÉ: VÉRIFICATION DU CACHE NER (SI SUPABASE CONNECTÉ) ---
+        if conn is not None:
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT extraction FROM clinical_ner_cache WHERE doc_id = %s", (filename,))
+                cached_result = cur.fetchone()
+                cur.close()
+                cur = None
+                if cached_result:
+                    print(f"⚡ CACHE HIT pour {filename} ! Réponse instantanée en {time.time() - start_time:.2f}s.")
+                    try:
+                        with mlflow.start_run():
+                            mlflow.log_param("disease", disease)
+                            mlflow.log_param("document", filename)
+                            mlflow.log_param("cache_hit", True)
+                            mlflow.log_metric("latency_sec", time.time() - start_time)
+                    except Exception:
+                        pass
+                    return {"status": "success", "disease": disease, "document": filename, "extraction": cached_result[0]}
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
         
         # --- 1. CHUNKING (Découpage) ---
-        # On ne peut pas donner un PDF de 100 pages à l'IA d'un coup (la mémoire exploserait).
-        # On le coupe en morceaux de 1000 caractères, avec un chevauchement de 200 pour ne pas couper une phrase au milieu.
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200, length_function=len)
         chunks = text_splitter.split_text(text)
         
-        # Rollback de toute transaction SQL cassée avant de commencer
-        conn.rollback()
-        cur = conn.cursor()
+        # Ingestion mémoire locale pour résilience RAG (Zéro-Downtime)
+        doc_chunks_list = []
+        for c in chunks:
+            try:
+                emb = get_biobert_embedding(c)
+                doc_chunks_list.append({"text": c, "emb": emb})
+            except Exception:
+                doc_chunks_list.append({"text": c, "emb": None})
+        MEMORY_DOC_CHUNKS[filename] = doc_chunks_list
         
-        # --- NOUVEAUTÉ (MLOps) : Nettoyage natif ---
-        # On supprime les anciens vecteurs de ce document précis avant d'insérer les nouveaux.
-        # Cela empêche l'accumulation de déchets si on change la méthode de découpage (Chunking).
-        cur.execute("DELETE FROM clinical_trials_data_biobert WHERE doc_id = %s", (filename,))
+        # --- 2. INGESTION VECTORIELLE SUPABASE (OPTIONNELLE) ---
+        if conn is not None:
+            try:
+                conn.rollback()
+                cur = conn.cursor()
+                cur.execute("DELETE FROM clinical_trials_data_biobert WHERE doc_id = %s", (filename,))
+                for idx, chunk_text in enumerate(chunks):
+                    embedding = get_biobert_embedding(chunk_text)
+                    cur.execute("""
+                        INSERT INTO clinical_trials_data_biobert (doc_id, chunk_id, raw_text, embedding)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (chunk_id) DO NOTHING
+                    """, (filename, f"{filename}_chunk_{idx}", chunk_text, embedding))
+                conn.commit()
+                cur.close()
+                cur = None
+                print(f"Ingestion pgvector terminée pour {filename}.")
+            except Exception as e_ing:
+                print(f"[WARN] Ingestion pgvector ignorée : {e_ing}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
         
-        # --- 2. INGESTION VECTORIELLE ---
-        for idx, chunk_text in enumerate(chunks):
-            embedding = get_biobert_embedding(chunk_text)
-            cur.execute("""
-                INSERT INTO clinical_trials_data_biobert (doc_id, chunk_id, raw_text, embedding)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (chunk_id) DO NOTHING
-            """, (filename, f"{filename}_chunk_{idx}", chunk_text, embedding))
-        conn.commit()
-        print(f"Ingestion terminée pour {filename}.")
+        # --- 3. RECHERCHE SEMANTIQUE (TOP 5 CHUNKS) ---
+        results = []
+        if conn is not None:
+            try:
+                cur = conn.cursor()
+                query = f"inclusion criteria medications {disease}"
+                query_emb = get_biobert_embedding(query)
+                cur.execute("""
+                    SELECT raw_text
+                    FROM clinical_trials_data_biobert
+                    WHERE doc_id = %s
+                    ORDER BY embedding <=> %s::vector
+                    LIMIT 5;
+                """, (filename, query_emb))
+                results = cur.fetchall()
+                cur.close()
+                cur = None
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
         
-        # --- 3. RECHERCHE SEMANTIQUE (MAP / RETRIEVAL) ---
-        query = f"inclusion criteria medications {disease}"
-        query_emb = get_biobert_embedding(query)
-        
-        # Le "ORDER BY embedding <=> %s::vector" est la syntaxe magique de l'extension `pgvector` de Postgres
-        # pour trouver instantanément les vecteurs les plus proches mathématiquement.
-        cur.execute("""
-            SELECT raw_text
-            FROM clinical_trials_data_biobert
-            WHERE doc_id = %s
-            ORDER BY embedding <=> %s::vector
-            LIMIT 5;
-        """, (filename, query_emb))
-        
-        results = cur.fetchall()
-        cur.close()
-        cur = None
-        
+        # Fallback mémoire résilient si base indisponible ou résultat vide
         if not results:
-            raise HTTPException(status_code=404, detail="Aucun texte trouvé pour ce document.")
+            results = [(c,) for c in chunks[:5]]
             
         context = "\n\n".join([f"Extrait:\n{r[0]}" for r in results])
         
@@ -300,18 +344,23 @@ Text: {context}"""
         final_json_str = json.dumps(final_dict, ensure_ascii=False)
         
         # --- ENREGISTREMENT DANS LE CACHE ---
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO clinical_ner_cache (doc_id, disease, extraction) 
-                VALUES (%s, %s, %s)
-                ON CONFLICT (doc_id) DO UPDATE SET extraction = EXCLUDED.extraction, disease = EXCLUDED.disease
-            """, (filename, disease, final_json_str))
-            conn.commit()
-            logger.info(f"💾 Sauvegarde en cache réussie pour {filename}.")
-        except Exception as e:
-            logger.warning(f"Erreur d'insertion cache : {e}")
-            conn.rollback()
+        if conn is not None:
+            try:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO clinical_ner_cache (doc_id, disease, extraction) 
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (doc_id) DO UPDATE SET extraction = EXCLUDED.extraction, disease = EXCLUDED.disease
+                """, (filename, disease, final_json_str))
+                conn.commit()
+                cur.close()
+                logger.info(f"💾 Sauvegarde en cache réussie pour {filename}.")
+            except Exception as e:
+                logger.warning(f"Erreur d'insertion cache : {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
         
         with mlflow.start_run():
             mlflow.log_param("disease", disease)
@@ -339,10 +388,11 @@ Text: {context}"""
     except HTTPException:
         raise  # Laisser passer les erreurs HTTP propres (404, etc.)
     except Exception as e:
-        try:
-            conn.rollback() # Annule la transaction SQL en cas d'erreur grave
-        except:
-            pass
+        if conn is not None:
+            try:
+                conn.rollback() # Annule la transaction SQL en cas d'erreur grave
+            except Exception:
+                pass
         logger.error(f"Erreur API process_extracted_text: {e}", exc_info=True)
         try:
             export_execution_xml(
@@ -443,40 +493,67 @@ async def chat_rag(question: str = Form(...), doc_id: str = Form(None), doc_ids:
         # 1. On vectorise la question de l'utilisateur (BioBERT)
         query_emb = get_biobert_embedding(question)
         
-        conn.rollback()
-        cur = conn.cursor()
-        
-        # 2. On interroge Supabase (Recherche des paragraphes les plus pertinents)
-        if doc_id:
-            # MODE "Filtrer par essai" : recherche ciblée sur UN seul essai clinique précis
-            cur.execute("""
-                SELECT doc_id, raw_text FROM clinical_trials_data_biobert
-                WHERE doc_id = %s
-                ORDER BY embedding <=> %s::vector LIMIT 15;
-            """, (doc_id, query_emb))
-        elif doc_ids:
-            # MODE "Toute la base" scopé : on recherche UNIQUEMENT dans les docs de la session courante
-            # doc_ids est une string de NCT séparés par des virgules (ex: "NCT001,NCT002")
-            session_doc_ids = [d.strip() for d in doc_ids.split(",") if d.strip()]
-            cur.execute("""
-                SELECT doc_id, raw_text FROM clinical_trials_data_biobert
-                WHERE doc_id = ANY(%s)
-                ORDER BY embedding <=> %s::vector LIMIT 15;
-            """, (session_doc_ids, query_emb))
-        else:
-            # FALLBACK : Recherche globale non scopée (à éviter — risque de contamination cross-session)
-            # On laisse ce cas pour compatibilité mais le front DOIT toujours passer doc_ids
-            cur.execute("""
-                SELECT doc_id, raw_text FROM clinical_trials_data_biobert
-                ORDER BY embedding <=> %s::vector LIMIT 15;
-            """, (query_emb,))
+        results = []
+        if conn is not None:
+            try:
+                conn.rollback()
+                cur = conn.cursor()
+                
+                # 2. On interroge Supabase (Recherche des paragraphes les plus pertinents)
+                if doc_id:
+                    cur.execute("""
+                        SELECT doc_id, raw_text FROM clinical_trials_data_biobert
+                        WHERE doc_id = %s
+                        ORDER BY embedding <=> %s::vector LIMIT 15;
+                    """, (doc_id, query_emb))
+                elif doc_ids:
+                    session_doc_ids = [d.strip() for d in doc_ids.split(",") if d.strip()]
+                    cur.execute("""
+                        SELECT doc_id, raw_text FROM clinical_trials_data_biobert
+                        WHERE doc_id = ANY(%s)
+                        ORDER BY embedding <=> %s::vector LIMIT 15;
+                    """, (session_doc_ids, query_emb))
+                else:
+                    cur.execute("""
+                        SELECT doc_id, raw_text FROM clinical_trials_data_biobert
+                        ORDER BY embedding <=> %s::vector LIMIT 15;
+                    """, (query_emb,))
+                    
+                results = cur.fetchall()
+                cur.close()
+                cur = None
+            except Exception as e_sql:
+                logger.warning(f"Erreur requête Supabase dans chat_rag : {e_sql}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+        # 2.bis Fallback RAG mémoire si Supabase est indisponible ou vide
+        if not results and MEMORY_DOC_CHUNKS:
+            try:
+                import numpy as np
+                q_vec = np.array(query_emb, dtype=np.float32)
+                q_norm = float(np.linalg.norm(q_vec)) + 1e-9
+                target_docs = [doc_id] if doc_id else ([d.strip() for d in doc_ids.split(",") if d.strip()] if doc_ids else list(MEMORY_DOC_CHUNKS.keys()))
+                scored_chunks = []
+                for did in target_docs:
+                    if did in MEMORY_DOC_CHUNKS:
+                        for item in MEMORY_DOC_CHUNKS[did]:
+                            if item.get("emb"):
+                                c_vec = np.array(item["emb"], dtype=np.float32)
+                                c_norm = float(np.linalg.norm(c_vec)) + 1e-9
+                                sim = float(np.dot(q_vec, c_vec) / (q_norm * c_norm))
+                            else:
+                                sim = 0.0
+                            scored_chunks.append((sim, did, item["text"]))
+                scored_chunks.sort(key=lambda x: x[0], reverse=True)
+                results = [(did, txt) for _, did, txt in scored_chunks[:15]]
+            except Exception as err_mem:
+                logger.warning(f"Erreur recherche RAG mémoire : {err_mem}")
             
-        results = cur.fetchall()
-        cur.close()
-        cur = None
-        
         if not results:
-            return {"answer": "Je n'ai pas trouvé d'informations pertinentes dans la base."}
+            return {"answer": "Je n'ai pas trouvé d'informations pertinentes dans les essais cliniques sélectionnés.", "context": []}
             
         # 3. NOUVEAU FORMATAGE PLUS CLAIR POUR L'IA (Séparation des documents) :
         context_parts = []
@@ -551,8 +628,11 @@ RÉPONSE:"""
         return {"answer": answer, "context": [r[0] for r in results]}
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         logger.error(f"Erreur RAG API: {e}", exc_info=True)
         try:
             export_execution_xml(

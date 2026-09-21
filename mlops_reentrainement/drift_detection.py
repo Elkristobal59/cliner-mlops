@@ -90,11 +90,11 @@ class EmbeddingDriftDetector:
                     ref_rows = cur.fetchall()
                     
                     # Nouveaux protocoles (derniers arrivés)
-                    cur.execute("SELECT embedding FROM clinical_trials_data_biobert ORDER BY id DESC LIMIT 5;")
+                    cur.execute("SELECT embedding FROM clinical_trials_data_biobert ORDER BY id DESC LIMIT %s;", (self.min_new_samples,))
                     curr_rows = cur.fetchall()
                 conn.close()
 
-                if len(ref_rows) >= 5 and len(curr_rows) >= 5:
+                if len(ref_rows) >= 5 and len(curr_rows) >= self.min_new_samples:
                     ref = np.array([r[0] for r in ref_rows], dtype=np.float32)
                     curr = np.array([r[0] for r in curr_rows], dtype=np.float32)
                     return ref, curr
@@ -152,9 +152,9 @@ class EmbeddingDriftDetector:
         }
 
 
-def check_drift(threshold: float = 0.15) -> Dict[str, Any]:
+def check_drift(threshold: float = 0.15, sample_size: int = 10) -> Dict[str, Any]:
     """Point d'entrée programmatique appelé par l'orchestrateur (run_pipeline.py)."""
-    detector = EmbeddingDriftDetector(threshold=threshold)
+    detector = EmbeddingDriftDetector(threshold=threshold, min_new_samples=sample_size)
     ref, curr = detector.load_embeddings_from_supabase()
     report = detector.compute_drift_metrics(ref, curr)
     return report
@@ -163,14 +163,14 @@ def check_drift(threshold: float = 0.15) -> Dict[str, Any]:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Détection de Dérive Sémantique BioBERT")
     parser.add_argument("--threshold", type=float, default=0.15, help="Seuil de dérive (défaut: 0.15)")
-    parser.add_argument("--sample-size", type=int, default=5, help="Nombre de nouveaux protocoles testés")
+    parser.add_argument("--sample-size", type=int, default=10, help="Nombre de nouveaux protocoles testés (défaut: 10)")
     args = parser.parse_args()
 
     print("=" * 70)
     print("🔬 ANALYSE DE DÉRIVE SÉMANTIQUE SUR EMBEDDINGS BIOBERT (768d)")
     print("=" * 70)
 
-    report = check_drift(threshold=args.threshold)
+    report = check_drift(threshold=args.threshold, sample_size=args.sample_size)
     print(json.dumps(report, indent=2, ensure_ascii=False))
 
     sys.exit(1 if report["drift_detected"] else 0)

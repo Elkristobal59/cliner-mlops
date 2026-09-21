@@ -30,6 +30,12 @@ if sys.platform == "win32":
         pass
 
 try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
     import boto3
     from botocore.exceptions import ClientError, NoCredentialsError
 except ImportError:
@@ -70,6 +76,49 @@ class EC2GPUManager:
         except Exception as e:
             print(f"[ERROR] Impossible de lire le statut EC2 : {e}")
             return "unknown"
+
+    def get_public_ip(self) -> Optional[str]:
+        """Récupère l'adresse IP publique actuelle de l'instance."""
+        if self.dry_run:
+            return "54.198.42.105"
+        try:
+            resp = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
+            inst = resp["Reservations"][0]["Instances"][0]
+            return inst.get("PublicIpAddress")
+        except Exception as e:
+            print(f"[ERROR] Impossible de récupérer l'IP EC2 : {e}")
+            return None
+
+    def execute_remote(self, command: str, key_path: Optional[str] = None, timeout: int = 600) -> Dict[str, Any]:
+        """Exécute une commande distante sur l'instance GPU AWS via SSH."""
+        if self.dry_run:
+            print(f"⚡ [DRY-RUN] Exécution distante simulée sur EC2 : {command}")
+            return {"status": "success", "exit_code": 0, "stdout": "[DRY-RUN] Commande exécutée sur GPU.", "stderr": ""}
+
+        public_ip = self.get_public_ip()
+        if not public_ip:
+            return {"status": "error", "error": "Instance sans IP publique disponible"}
+
+        key_file = key_path or os.getenv("EC2_SSH_KEY_PATH", os.path.join(os.path.dirname(__file__), "..", "cliner-key.pem"))
+        key_file = os.path.abspath(key_file)
+        print(f"📡 [SSH Distant] Connexion à l'instance GPU AWS ({public_ip})...")
+
+        try:
+            import paramiko
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            key = paramiko.RSAKey.from_private_key_file(key_file)
+            ssh.connect(public_ip, username="ubuntu", pkey=key, timeout=30)
+            print(f"🚀 [GPU AWS EC2] Lancement du calcul distant sur Tesla T4 : {command}")
+            stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
+            exit_code = stdout.channel.recv_exit_status()
+            out = stdout.read().decode("utf-8", errors="replace")
+            err = stderr.read().decode("utf-8", errors="replace")
+            ssh.close()
+            return {"status": "success" if exit_code == 0 else "error", "exit_code": exit_code, "stdout": out, "stderr": err}
+        except Exception as e:
+            print(f"❌ [SSH Distant] Erreur lors de l'exécution distante : {e}")
+            return {"status": "error", "error": str(e)}
 
     def start(self, timeout_sec: int = 180) -> Dict[str, Any]:
         """

@@ -296,10 +296,10 @@ AWS_ACCESS_KEY_ID="<VOTRE_AWS_ACCESS_KEY_ID>"
 AWS_SECRET_ACCESS_KEY="<VOTRE_AWS_SECRET_ACCESS_KEY>"
 AWS_DEFAULT_REGION="eu-west-3"
 S3_BUCKET_NAME="cliner-mlops"
-AWS_EC2_GPU_INSTANCE_ID="i-09f18a47bce42gpu"
+AWS_EC2_GPU_INSTANCE_ID="i-0bb73662c67f2828f"
 
-# Mettre à 'false' une fois l'instance g4dn.xlarge déployée
-MOCK_AWS_EC2="true"
+# Mode réel AWS EC2 GPU (boto3) activé :
+MOCK_AWS_EC2="false"
 
 # ==============================================================================
 # 2. SUPABASE (Base Relationnelle, pgvector & Cache)
@@ -328,21 +328,28 @@ LLM_MODEL_NAME="gemini-flash-lite-latest"
 
 ## 🚀 Guide d'Exécution Pas-à-Pas
 
-### 1. Exécuter la Démo du Pipeline MLOps (Simulation End-to-End)
-Lance la simulation complète (Drift Wasserstein $\rightarrow$ Démarrage EC2 $\rightarrow$ Fine-Tuning LoRA $\rightarrow$ Upload S3 $\rightarrow$ Auto-Kill EC2) en **9 secondes à 0.00 €** avec envoi réel des logs vers Google Cloud Run :
+### 1. Exécuter la Démo du Pipeline MLOps
 
+#### Option A : Simulation rapide (Dry-run / CI/CD)
+Lance la simulation complète (Drift Wasserstein $\rightarrow$ Démarrage EC2 $\rightarrow$ Fine-Tuning LoRA $\rightarrow$ Upload S3 $\rightarrow$ Auto-Kill EC2) en **9 secondes à 0.00 €** avec envoi réel des logs vers Google Cloud Run :
 ```powershell
 cd "d:\AIL-FT-02\CERTIF AIL\cliner-mlops"
-python mlops_reentrainement/run_pipeline.py --dry-run
+python -m mlops_reentrainement.run_pipeline --dry-run
+```
+
+#### Option B : Exécution Réelle sur Infrastructure AWS GPU (FinOps)
+Pilote en direct l'instance physique GPU Nvidia T4 16 Go (`i-0bb73662c67f2828f`) via Boto3, avec extinction automatique (**Auto-Kill**) dans le bloc `finally` :
+```powershell
+python -m mlops_reentrainement.run_pipeline --live
 ```
 
 *Variantes de démonstration :*
 ```powershell
 # Forcer le réentraînement même si la distribution est stable :
-python mlops_reentrainement/run_pipeline.py --dry-run --force-retrain
+python -m mlops_reentrainement.run_pipeline --force-retrain
 
-# Abaisser le seuil d'alerte pour déclencher le drift :
-python mlops_reentrainement/run_pipeline.py --dry-run --threshold 0.05
+# Abaisser le seuil d'alerte pour forcer le drift :
+python -m mlops_reentrainement.run_pipeline --threshold 0.05
 ```
 
 ### 2. Tester chaque brique MLOps unitairement
@@ -549,11 +556,23 @@ Les deux projets sont **strictement étanches** :
   - **Supabase pgvector :** Mises à jour idempotentes (`DELETE WHERE doc_id = %s` avant réinsertion) uniquement si une étude est révisée, sans supprimer les autres.
   - **Détection de Dérive (Wasserstein) :** Analyse calculée sur une **fenêtre glissante des 5 derniers protocoles insérés** (`ORDER BY id DESC LIMIT 5`) comparée au Gold Standard CHIA de référence (800 protocoles). Si $W > 0.15 \rightarrow$ Allumage EC2 GPU $\rightarrow$ Fine-Tuning LoRA $\rightarrow$ Auto-Kill immédiat !
 
-### Q7 : Comment est organisée la présentation Demo Day AIL (Format 4 personnes — 8 minutes chrono) ?
-* **Support officiel Widescreen 16:9 :** [`demoday_cliner-mlops.pptx`](demoday_cliner-mlops.pptx) (6 slides vulgarisées).
-* **Format & Répartition :** Exactement **4 orateurs × 2 minutes = 8 minutes chrono** :
-  1. **Orateur 1 (00:00 - 02:00 / Slides 1 & 2)** : Cadrage Stratégique, Paradoxe du recrutement (80% de retards) & Proposition de Valeur CliNER (3s, souverain, zéro hallucination).
-  2. **Orateur 2 (02:00 - 04:00 / Slide 3)** : Démonstration Live commentée de l'application Streamlit (Recherche en direct, extraction NER chirurgicale des critères, Chatbot RAG).
-  3. **Orateur 3 (04:00 - 06:00 / Slide 4)** : Architecture Vulgarisée & Circuit complet de la donnée (Flux médecin BioBERT/Qwen LoRA + Boucle MLOps réentraînement autonome à 0,17 €).
-  4. **Orateur 4 (06:00 - 08:00 / Slides 5 & 6)** : Le Secret du NER (F1 58.3% CHIA, suppression des erreurs critiques), Perspectives (LoRA spécialisés, intégration DPI hospitalier) & Clôture de l'équipe (P. Mouliom, C. Gilleron, A. Hoarau, K. Atebata).
-* **Script complet & trame de discours :** Référencé dans [`SPEECH_DEMODAY_CLINER_MLOPS.md`](SPEECH_DEMODAY_CLINER_MLOPS.md).
+### Q7 : Comment est architecturé le dossier `mlops_reentrainement/` ?
+Tous les modules de la boucle d'automatisation MLOps sont regroupés dans [mlops_reentrainement/](mlops_reentrainement/) :
+
+| Fichier | Rôle & Responsabilité Système |
+| :--- | :--- |
+| **`run_pipeline.py`** | **Orchestrateur Maître** : Pilote les 4 phases (Détection Drift $\rightarrow$ Démarrage EC2 $\rightarrow$ Train LoRA $\rightarrow$ S3/MLflow $\rightarrow$ Auto-Kill). |
+| **`drift_detection.py`** | **Détection de Dérive** : Calcule la distance de Wasserstein ($W_1$) sur les embeddings BioBERT (768 dimensions). |
+| **`monitoring_evidently.py`** | **Rapports de Distribution** : Génère le rapport visuel de distribution Evidently AI (`reports/data_drift_report.html`). |
+| **`ec2_manager.py`** | **Gestionnaire d'Infrastructure EC2** : Pilote le cycle de vie de l'instance GPU via `boto3` et l'exécution distante via SSH. |
+| **`finetune_lora.py`** | **Moteur QLoRA 4-bit** : Réentraîne l'adaptateur LoRA de Qwen-7B ($r=16, \alpha=32$) et exporte les métriques de convergence. |
+| **`s3_storage.py`** | **Model Store S3** : Téléverse l'adaptateur réentraîné (~84 Mo) vers le bucket AWS S3 `s3://cliner-mlops/models_lora/`. |
+| **`logger_config.py`** | **Journalisation d'Audit** : Génère les journaux d'exécution XML conformes aux exigences de traçabilité médicale. |
+
+---
+
+## 📄 Licence & Conformité
+Projet distribué sous licence MIT. Conforme aux standards de traçabilité HDS / RGPD et aux bonnes pratiques d'ingénierie logicielle pour l'intelligence artificielle en santé.
+
+
+

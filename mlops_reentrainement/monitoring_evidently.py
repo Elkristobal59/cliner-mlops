@@ -234,6 +234,9 @@ def generate_drift_report(
 """
         with open(HTML_REPORT_PATH, "w", encoding="utf-8") as f:
             f.write(html_content)
+        alt_html = os.path.join(REPORTS_DIR, "evidently_drift_report.html")
+        with open(alt_html, "w", encoding="utf-8") as f:
+            f.write(html_content)
 
         print(f"✅ Rapport visuel autonome généré dans {HTML_REPORT_PATH}")
 
