@@ -429,16 +429,19 @@ Le projet CliNER-MLOps intègre une pile complète de monitoring et de gouvernan
 ### 1. Monitoring ML : Détection du Data Drift (Evidently AI & MLflow Tracking)
 * **Pourquoi la surveillance non supervisée du Data Drift ?** En environnement clinique hospitalier, les nouveaux protocoles reçus ne disposent d'aucune vérité terrain annotée en temps réel. Il est donc impossible de calculer une métrique supervisée (F1-score) en continu. La surveillance s'appuie sur la détection précoce du *Covariate Shift* (dérive des données d'entrée).
 * **Double niveau d'analyse statistique :**
-  1. **Niveau Macro-Sémantique (Wasserstein Distance)** : Calcul de la distance de Wasserstein (Earth Mover's Distance) sur les projections denses d'embeddings BioBERT (768 dimensions), avec seuil critique fixé à $W = 0.15$.
-  2. **Niveau Caractéristiques Textuelles (Evidently AI)** : Analyse de la dérive des distributions statistiques sur 5 métriques clés via tests de Kolmogorov-Smirnov (KS) à 2 échantillons :
-     - Longueur de texte en caractères (`char_count`).
-     - Nombre de mots (`word_count`).
-     - Longueur moyenne des mots médicaux (`avg_word_len`).
-     - Densité numérique (`digit_ratio` : concentrations, dosages en mg, valeurs biologiques).
-     - Ratio de majuscules (`uppercase_ratio` : acronymes de mutations, gènes, stades cliniques).
+  1. **Niveau Macro-Sémantique (Wasserstein Distance)** : Calcul de la distance de Wasserstein (Earth Mover's Distance) sur les projections denses d'embeddings BioBERT (768 dimensions), avec seuil critique fixé à $W = 0.15$. C'est le **déclencheur FinOps binaire** du réentraînement automatisé sur EC2.
+  2. **Niveau Caractéristiques Textuelles (Evidently AI)** : Analyse de la dérive des distributions statistiques sur 5 métriques clés via tests de Kolmogorov-Smirnov (KS) à 2 échantillons (comparaison de fonctions de répartition cumulées, évitant les faux positifs dus aux fluctuations individuelles de texte) :
+     - Longueur de texte en caractères (`char_count`) : contrôle de l'intégrité du découpage textuel.
+     - Nombre de mots (`word_count`) : détection des textes tronqués ou des PDF non segmentés.
+     - Longueur moyenne des mots médicaux (`avg_word_len`) : capteur du jargon biomédical (termes latins/molécules à 9-14 lettres vs langage courant).
+     - Densité numérique (`digit_ratio`) : présence des seuils physiologiques, dosages (mg/kg), âges et durées.
+     - Ratio de majuscules (`uppercase_ratio`) : présence des biomarqueurs et mutations (*BRAF*, *EGFR*, *ECOG*).
 * **Restitution visuelle & Alerting automatisé :**
   - Génération automatique d'un rapport interactif **HTML** (`reports/data_drift_report.html`) et d'un état synthétique **JSON** (`reports/data_drift_report.json`).
   - Téléversement direct dans le serveur **MLflow Tracking Cloud Run** (`mlflow.log_artifact`) lors de chaque exécution du pipeline ou du cycle de réentraînement.
+* **Complémentarité Architecturale (Macro vs Micro) :**
+  - *Wasserstein BioBERT* répond à la question : **« Doit-on réentraîner le modèle ? »** (décision machine).
+  - *Evidently AI* répond à la question : **« Pourquoi et sur quels critères le flux de données a-t-il changé ? »** (explicabilité humaine XAI).
 
 ### 2. Monitoring Pipeline : Logging Structuré & Haute Résilience (Standard Stéphane Robert)
 Conformément aux standards d'ingénierie logicielle Python (cf. guide Stéphane Robert), la journalisation applicative de l'API et de l'orchestrateur est configurée de manière robuste :
