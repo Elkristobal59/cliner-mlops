@@ -36,6 +36,10 @@ from drift_detection import check_drift
 from ec2_manager import EC2GPUManager
 from finetune_lora import run_lora_finetuning
 from s3_storage import S3StorageManager
+from logger_config import get_logger, export_execution_xml
+from monitoring_evidently import generate_drift_report
+
+logger = get_logger("cliner_pipeline")
 
 
 def orchestrate_mlops_pipeline(
@@ -75,11 +79,45 @@ def orchestrate_mlops_pipeline(
     print(f"  ├── Décalage de similarité : {drift_res['semantic_distance_shift']}")
     print(f"  └── Statut Dérive : {'🚨 DRIFT DÉTECTÉ' if drift_res['drift_detected'] else '✅ DISTRIBUTION STABLE'}")
 
+    # Génération du rapport visuel Evidently AI (Distribution Drift) couplé à MLflow
+    print("  ├── Génération du rapport visuel Evidently AI (Distribution Drift)...")
+    try:
+        evidently_res = generate_drift_report()
+        pipeline_report["evidently_report"] = evidently_res
+        pipeline_report["steps_completed"].append("evidently_report_generated")
+        print(f"  └── Rapport Evidently généré : {evidently_res.get('html_report')}")
+    except Exception as err_ev:
+        logger.warning(f"Erreur génération rapport Evidently : {err_ev}")
+        print(f"  └── ⚠️ Rapport Evidently ignoré ({err_ev})")
+
     if not drift_res["drift_detected"] and not force_retrain:
         print("\n🟢 [FIN DU PIPELINE - FINOPS] Aucune dérive critique détectée.")
         print("💡 L'infrastructure Cloud GPU reste éteinte. Économie de calcul : 100%.")
         pipeline_report["status"] = "skipped_no_drift"
         pipeline_report["total_duration_sec"] = round(time.time() - overall_start, 2)
+        
+        # Export XML même en cas de skip
+        try:
+            xml_steps = [
+                {"name": "drift_detection", "status": "SUCCESS", "drift_detected": "False"},
+                {"name": "evidently_drift_report", "status": "SUCCESS" if "evidently_report_generated" in pipeline_report["steps_completed"] else "SKIPPED"}
+            ]
+            xml_metrics = {
+                "duration_sec": pipeline_report["total_duration_sec"],
+                "wasserstein_distance": drift_res.get("wasserstein_distance", 0.0),
+                "drift_detected": False
+            }
+            xml_path = export_execution_xml(
+                execution_id=f"pipeline_skip_{int(overall_start)}",
+                status="SUCCESS",
+                steps=xml_steps,
+                metrics=xml_metrics,
+                metadata={"environment": "production", "orchestrator": "run_pipeline.py"}
+            )
+            pipeline_report["xml_journal_path"] = xml_path
+        except Exception:
+            pass
+
         return pipeline_report
 
     if force_retrain and not drift_res["drift_detected"]:
@@ -132,6 +170,41 @@ def orchestrate_mlops_pipeline(
 
     pipeline_report["status"] = "success" if pipeline_report["status"] != "failed" else "failed"
     pipeline_report["total_duration_sec"] = round(time.time() - overall_start, 2)
+
+    # ---------------------------------------------------------
+    # ÉTAPE AUDIT & CONFORMITÉ : EXPORT DU JOURNAL XML MÉDICO-LÉGAL
+    # ---------------------------------------------------------
+    try:
+        xml_steps = [
+            {"name": "drift_detection", "status": "SUCCESS", "drift_detected": str(drift_res.get("drift_detected", False))},
+            {"name": "evidently_drift_report", "status": "SUCCESS" if "evidently_report_generated" in pipeline_report["steps_completed"] else "SKIPPED"},
+            {"name": "ec2_start", "status": "SUCCESS" if "ec2_started" in pipeline_report["steps_completed"] else "SKIPPED"},
+            {"name": "lora_finetuning", "status": "SUCCESS" if "finetune_completed" in pipeline_report["steps_completed"] else "SKIPPED"},
+            {"name": "s3_upload", "status": "SUCCESS" if "model_registered" in pipeline_report["steps_completed"] else "SKIPPED"},
+            {"name": "ec2_auto_killed", "status": "SUCCESS" if "ec2_auto_killed" in pipeline_report["steps_completed"] else "SKIPPED"}
+        ]
+        xml_metrics = {
+            "duration_sec": pipeline_report["total_duration_sec"],
+            "wasserstein_distance": drift_res.get("wasserstein_distance", 0.0),
+            "drift_detected": drift_res.get("drift_detected", False)
+        }
+        if pipeline_report.get("finetuning"):
+            ft = pipeline_report["finetuning"]
+            xml_metrics["final_loss"] = ft.get("final_loss", 0.0)
+            xml_metrics["f1_score"] = ft.get("f1_score", 0.0)
+            xml_metrics["precision"] = ft.get("precision", 0.0)
+
+        xml_path = export_execution_xml(
+            execution_id=f"pipeline_{int(overall_start)}",
+            status="SUCCESS" if pipeline_report["status"] != "failed" else "FAILED",
+            steps=xml_steps,
+            metrics=xml_metrics,
+            metadata={"environment": "production", "orchestrator": "run_pipeline.py"}
+        )
+        pipeline_report["xml_journal_path"] = xml_path
+        print(f"📄 Journal XML d'exécution généré : {xml_path}")
+    except Exception as err_xml:
+        logger.warning(f"Impossible d'exporter le journal XML : {err_xml}")
 
     print("\n" + "═" * 72)
     print(f"✨ PIPELINE TERMINÉ AVEC SUCCÈS EN {pipeline_report['total_duration_sec']}s !")

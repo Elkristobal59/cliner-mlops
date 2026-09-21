@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-09-21T12:29:55.367703+00:00Z",
+  "evidently_version": "0.7.0 (Autonomous High-Performance Engine)",
+  "summary": {
+    "dataset_drift": true,
+    "drift_share": 1.0,
+    "number_of_features": 5,
+    "drifted_features_count": 5
+  },
+  "features": [
+    {
+      "feature": "char_count",
+      "p_value": 3.367053534047912e-23,
+      "wasserstein_distance": 76.0,
+      "ref_mean": 0.0,
+      "prod_mean": 76.0,
+      "drift_detected": true
+    },
+    {
+      "feature": "word_count",
+      "p_value": 3.367053534047912e-23,
+      "wasserstein_distance": 10.75,
+      "ref_mean": 0.0,
+      "prod_mean": 10.75,
+      "drift_detected": true
+    },
+    {
+      "feature": "avg_word_len",
+      "p_value": 3.367053534047912e-23,
+      "wasserstein_distance": 6.2384615384615385,
+      "ref_mean": 0.0,
+      "prod_mean": 6.2384615384615385,
+      "drift_detected": true
+    },
+    {
+      "feature": "digit_ratio",
+      "p_value": 2.2787743939213427e-11,
+      "wasserstein_distance": 0.020310402905339614,
+      "ref_mean": 0.0,
+      "prod_mean": 0.020310402905339614,
+      "drift_detected": true
+    },
+    {
+      "feature": "uppercase_ratio",
+      "p_value": 3.367053534047912e-23,
+      "wasserstein_distance": 0.08918617503398193,
+      "ref_mean": 0.0,
+      "prod_mean": 0.08918617503398193,
+      "drift_detected": true
+    }
+  ]
+}

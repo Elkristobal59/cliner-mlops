@@ -30,6 +30,8 @@ from ec2_manager import EC2GPUManager
 from finetune_lora import run_lora_finetuning
 from s3_storage import S3StorageManager
 from run_pipeline import orchestrate_mlops_pipeline
+from logger_config import export_execution_xml, get_logger
+from monitoring_evidently import generate_drift_report, HTML_REPORT_PATH, JSON_REPORT_PATH
 
 
 class TestMLOpsPipeline:
@@ -177,3 +179,52 @@ class TestMLOpsPipeline:
         assert "finetuning" in report
         assert "steps_completed" in report
         assert "ec2_auto_killed" in report["steps_completed"]
+        assert "evidently_report_generated" in report["steps_completed"]
+        assert "xml_journal_path" in report
+
+    # --------------------------------------------------------------------------
+    # 7. Tests Traçabilité XML & Monitoring Evidently AI (RNCP 41993 - Bloc 4)
+    # --------------------------------------------------------------------------
+    def test_structured_xml_logging(self, tmp_path):
+        """Vérifie la génération d'un journal d'exécution XML conforme et bien formé."""
+        import xml.etree.ElementTree as ET
+
+        xml_path = export_execution_xml(
+            execution_id="test_exec_001",
+            status="SUCCESS",
+            steps=[
+                {"name": "unit_test_step", "status": "SUCCESS", "latency_ms": 12.5}
+            ],
+            metrics={"test_metric": 0.99},
+            metadata={"runner": "pytest"},
+            output_dir=str(tmp_path)
+        )
+
+        assert os.path.exists(xml_path), f"Fichier XML non généré : {xml_path}"
+        
+        # Validation du parsing XML
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        assert root.tag == "PipelineExecution"
+        assert root.attrib["id"] == "test_exec_001"
+        assert root.attrib["status"] == "SUCCESS"
+        assert root.find("Environment") is not None
+        assert root.find("ExecutionSteps") is not None
+        assert root.find("Metrics") is not None
+
+    def test_evidently_drift_report_generation(self):
+        """Vérifie la génération des rapports Data Drift (HTML & JSON) Evidently AI."""
+        report_info = generate_drift_report()
+        assert isinstance(report_info, dict)
+        assert "html_path" in report_info
+        assert "json_path" in report_info
+        assert os.path.exists(report_info["html_path"])
+        assert os.path.exists(report_info["json_path"])
+
+        # Vérification du contenu JSON (structure standardisée Evidently)
+        with open(report_info["json_path"], "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert "features" in data or "drift_by_feature" in data
+        assert "summary" in data or "dataset_drift" in data
+        assert "timestamp" in data
+

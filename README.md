@@ -410,15 +410,64 @@ Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal5
 * **Secrets GitHub configurés :** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (`eu-west-3`), `S3_BUCKET_NAME` (`cliner-mlops`), `MLFLOW_TRACKING_URI`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
 * **`ci_mlops.yml` (Quality Gate à chaque push)** :
   1. Linting strict Flake8 (détection des erreurs de syntaxe et imports manquants).
-  2. **Suite de Tests Automatisés PyTest (`pytest tests/ -v`)** : 9 tests unitaires et d'intégration validant le calcul de drift Wasserstein, le cycle de vie EC2 FinOps, le fine-tuning LoRA, le connecteur S3 et l'intégrité des datasets CHIA.
+  2. **Suite de Tests Automatisés PyTest (`pytest tests/ -v`)** : 11 tests unitaires et d'intégration validant le calcul de drift Wasserstein, Evidently AI (génération des rapports HTML/JSON de Data Drift), la traçabilité XML médico-légale (HDS/RGPD), le cycle de vie EC2 FinOps, le fine-tuning LoRA, le connecteur S3 et l'intégrité des datasets CHIA.
   3. **Simulation du cycle Continuous Training LoRA** avec enregistrement direct sur MLflow Cloud Run.
   4. **Construction des conteneurs Docker** (`cliner-frontend` et `cliner-mlops-worker`) et push automatique sur Docker Hub.
 * **`weekly_mlops_pipeline.yml` (Surveillance Hebdomadaire du Drift & Continuous Training)** :
   * Planifié chaque lundi à 02h00 UTC via cron GitHub Actions (**100% Free Tier, 0,00 € de coût de veille**).
-  * Exécute les tests PyTest, analyse la dérive de Wasserstein sur la fenêtre glissante des 5 derniers protocoles, et lance le réentraînement LoRA si $W > 0.15$.
+  * Exécute les tests PyTest, analyse la dérive de Wasserstein et le rapport Evidently AI sur la fenêtre glissante des 5 derniers protocoles, et lance le réentraînement LoRA si $W > 0.15$.
 * **`deploy_ec2_autokill.yml` (Déploiement EC2 à la demande avec minuteur FinOps)** :
   * Déclenchable manuellement depuis l'onglet Actions avec sélection de la durée (15, 30, 45, 60 min).
   * Démarre l'instance GPU AWS, maintient la session active pendant les démonstrations, et exécute **l'Auto-Kill systématique** (`if: always()`).
+
+---
+
+## 📊 Monitoring ML (Evidently AI), Observabilité du Pipeline & Traçabilité XML (HDS/RGPD)
+
+Le projet CliNER-MLOps intègre une pile complète de monitoring et de gouvernance industrielle conforme aux exigences du référentiel **RNCP 41993 - Bloc 4** :
+
+### 1. Monitoring ML : Détection du Data Drift (Evidently AI & MLflow Tracking)
+* **Pourquoi la surveillance non supervisée du Data Drift ?** En environnement clinique hospitalier, les nouveaux protocoles reçus ne disposent d'aucune vérité terrain annotée en temps réel. Il est donc impossible de calculer une métrique supervisée (F1-score) en continu. La surveillance s'appuie sur la détection précoce du *Covariate Shift* (dérive des données d'entrée).
+* **Double niveau d'analyse statistique :**
+  1. **Niveau Macro-Sémantique (Wasserstein Distance)** : Calcul de la distance de Wasserstein (Earth Mover's Distance) sur les projections denses d'embeddings BioBERT (768 dimensions), avec seuil critique fixé à $W = 0.15$.
+  2. **Niveau Caractéristiques Textuelles (Evidently AI)** : Analyse de la dérive des distributions statistiques sur 5 métriques clés via tests de Kolmogorov-Smirnov (KS) à 2 échantillons :
+     - Longueur de texte en caractères (`char_count`).
+     - Nombre de mots (`word_count`).
+     - Longueur moyenne des mots médicaux (`avg_word_len`).
+     - Densité numérique (`digit_ratio` : concentrations, dosages en mg, valeurs biologiques).
+     - Ratio de majuscules (`uppercase_ratio` : acronymes de mutations, gènes, stades cliniques).
+* **Restitution visuelle & Alerting automatisé :**
+  - Génération automatique d'un rapport interactif **HTML** (`reports/data_drift_report.html`) et d'un état synthétique **JSON** (`reports/data_drift_report.json`).
+  - Téléversement direct dans le serveur **MLflow Tracking Cloud Run** (`mlflow.log_artifact`) lors de chaque exécution du pipeline ou du cycle de réentraînement.
+
+### 2. Monitoring Pipeline : Logging Structuré & Haute Résilience (Standard Stéphane Robert)
+Conformément aux standards d'ingénierie logicielle Python (cf. guide Stéphane Robert), la journalisation applicative de l'API et de l'orchestrateur est configurée de manière robuste :
+* **Double Handler d'écoute :** Sortie console temps réel (`StreamHandler`) et journalisation fichier rotative (`RotatingFileHandler`).
+* **Protection contre la saturation disque :** Rotation paramétrée à **5 Mo par fichier avec rétention de 5 archives** (`maxBytes=5*1024*1024`, `backupCount=5`), plafonnant l'empreinte disque maximale à 25 Mo.
+* **Format standardisé et horodaté :**
+  `Date/Heure | Niveau (INFO/WARNING/ERROR) | Logger | [Fichier:Ligne] | Message`
+* **Exposition HTTP / Endpoints d'Administration (FastAPI) :**
+  - `GET /logs?lines=100` : Permet aux équipes DevOps/SRE de diagnostiquer instantanément l'état de l'API sans nécessiter d'accès SSH ni de clés de bastion sur les machines de production.
+  - `GET /logs/xml` : Télécharge le dernier journal XML certifié pour archivage réglementaire.
+  - `GET /monitoring/drift-report` : Affiche le dashboard interactif Evidently AI dans n'importe quel navigateur web.
+
+### 3. Traçabilité Médico-Légale & Auditabilité Réglementaire (Journaux XML HDS/RGPD)
+Pour chaque exécution critique (extraction NER, conversation RAG, réentraînement de pipeline), le système compile un journal structuré au format **XML** (`logs/execution_journals/<id>.xml`) :
+* **Structure hiérarchique certifiée :**
+  ```xml
+  <PipelineExecution id="ner_NCT02421835_1789993800" status="SUCCESS" timestamp="2026-09-21T12:30:00.000Z">
+    <Environment platform="win32" python_version="3.13.9" environment="production"/>
+    <ExecutionSteps>
+      <Step name="clinical_ner_extraction" status="SUCCESS" latency_ms="3250.40" entities_count="12"/>
+    </ExecutionSteps>
+    <Metrics>
+      <Metric name="latency_sec" value="3.25"/>
+      <Metric name="document" value="NCT02421835"/>
+      <Metric name="disease" value="Mélanome Métastatique"/>
+    </Metrics>
+  </PipelineExecution>
+  ```
+* **Conformité HDS & RGPD :** Horodatage immuable ISO 8601 UTC, séparation stricte des données de santé (données patients pseudonymisées hors logs), et traçabilité exhaustive de la chaîne de décision algorithmique pour les autorités de santé (ANSM, FDA, CNIL).
 
 ---
 

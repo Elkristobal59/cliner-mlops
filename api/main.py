@@ -25,6 +25,7 @@ import torch
 import time
 import mlflow
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse, PlainTextResponse
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModel
 try:
     from vllm import LLM, SamplingParams
@@ -33,9 +34,27 @@ except ImportError:
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 
+from mlops_reentrainement.logger_config import (
+    get_logger,
+    export_execution_xml,
+    DEFAULT_LOG_FILE,
+    DEFAULT_XML_DIR
+)
+from mlops_reentrainement.monitoring_evidently import (
+    HTML_REPORT_PATH,
+    JSON_REPORT_PATH,
+    generate_drift_report
+)
+
 load_dotenv()
 
-app = FastAPI(title="Clinical Trials AI Extraction API (Phase 3)")
+logger = get_logger("cliner_api")
+
+app = FastAPI(
+    title="Clinical Trials AI Extraction API (Phase 3)",
+    description="API industrielle d'extraction NER clinique, RAG sémantique, traçabilité XML et monitoring Evidently AI.",
+    version="2.1.0"
+)
 
 # ---------------------------------------------------------
 # ⚙️ CONFIGURATION DES MODÈLES ET SERVICES
@@ -289,9 +308,9 @@ Text: {context}"""
                 ON CONFLICT (doc_id) DO UPDATE SET extraction = EXCLUDED.extraction, disease = EXCLUDED.disease
             """, (filename, disease, final_json_str))
             conn.commit()
-            print(f"💾 Sauvegarde en cache réussie pour {filename}.")
+            logger.info(f"💾 Sauvegarde en cache réussie pour {filename}.")
         except Exception as e:
-            print(f"Erreur d'insertion cache : {e}")
+            logger.warning(f"Erreur d'insertion cache : {e}")
             conn.rollback()
         
         with mlflow.start_run():
@@ -301,6 +320,19 @@ Text: {context}"""
             mlflow.log_metric("latency_sec", latency)
             mlflow.log_text(prompt, "prompt.txt")
             mlflow.log_text(response_json, "ner_response_raw.json")
+
+        # Journal XML médico-légal (HDS / RGPD)
+        try:
+            xml_path = export_execution_xml(
+                execution_id=f"ner_{filename}_{int(time.time())}",
+                status="SUCCESS",
+                stage="clinical_ner_extraction",
+                metrics={"latency_sec": round(latency, 4), "document": filename, "disease": disease},
+                details={"entities_count": len(final_dict.get("medications", [])) + (1 if final_dict.get("condition") else 0)}
+            )
+            logger.info(f"Journal XML d'exécution généré : {xml_path}")
+        except Exception as err_xml:
+            logger.warning(f"Impossible d'exporter le journal XML : {err_xml}")
             
         return {"status": "success", "disease": disease, "document": filename, "extraction": final_json_str}
 
@@ -311,7 +343,17 @@ Text: {context}"""
             conn.rollback() # Annule la transaction SQL en cas d'erreur grave
         except:
             pass
-        print(f"Erreur API: {e}")
+        logger.error(f"Erreur API process_extracted_text: {e}", exc_info=True)
+        try:
+            export_execution_xml(
+                execution_id=f"ner_err_{filename}_{int(time.time())}",
+                status="ERROR",
+                stage="clinical_ner_extraction",
+                metrics={"latency_sec": round(time.time() - start_time, 4)},
+                details={"error": str(e), "disease": disease, "document": filename}
+            )
+        except:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cur is not None:
@@ -333,7 +375,7 @@ async def process_text(
     on esquive toute l'étape d'extraction PyMuPDF !
     """
     start_time = time.time()
-    print(f"Réception du texte direct pour l'essai {document_id}")
+    logger.info(f"Réception du texte direct pour l'essai {document_id}")
     return process_extracted_text(text=text_content, filename=document_id, disease=disease, start_time=start_time)
 
 
@@ -361,7 +403,7 @@ async def process_pdf(
         doc.close()
         
         filename = file.filename.replace(".pdf", "")
-        print(f"PDF {filename} reçu, extraction de texte terminée.")
+        logger.info(f"PDF {filename} reçu, extraction de texte terminée ({len(text)} caractères).")
         
         # --- 2. UPLOAD PDF SUR SUPABASE STORAGE (Archivage Cloud) ---
         supa_url = os.getenv("SUPABASE_API_URL")
@@ -373,17 +415,17 @@ async def process_pdf(
                 # Upload dans le bucket sécurisé nommé 'clinical_pdfs'
                 res = requests.put(f"{supa_url}/storage/v1/object/clinical_pdfs/{file.filename}", data=content, headers=headers)
                 if res.status_code in [200, 201]:
-                    print(f"PDF uploadé sur Supabase Storage: {file.filename}")
+                    logger.info(f"PDF uploadé sur Supabase Storage: {file.filename}")
                 else:
-                    print(f"Erreur Supabase Storage: {res.text}")
+                    logger.warning(f"Erreur Supabase Storage ({res.status_code}): {res.text}")
             except Exception as e:
-                print(f"Erreur lors de l'upload Supabase: {e}")
+                logger.warning(f"Erreur lors de l'upload Supabase: {e}")
                 
         # 3. Lancement du RAG
         return process_extracted_text(text=text, filename=filename, disease=disease, start_time=start_time)
 
     except Exception as e:
-        print(f"Erreur lecture PDF: {e}")
+        logger.error(f"Erreur lecture PDF: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat_rag")
@@ -463,7 +505,7 @@ RÉPONSE:"""
         
         text_prompt = qwen_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
-        print(f"Génération RAG pour: {question}...")
+        logger.info(f"Génération RAG pour: {question[:80]}...")
         
         # 4. Génération de la réponse (Qwen)
         if is_vllm:
@@ -483,7 +525,7 @@ RÉPONSE:"""
         
         latency = time.time() - start_time
         
-        # 5. Monitoring
+        # 5. Monitoring MLflow
         with mlflow.start_run():
             mlflow.log_param("task", "chat_rag")
             mlflow.log_param("doc_id", doc_id)
@@ -492,15 +534,88 @@ RÉPONSE:"""
             mlflow.log_metric("latency_sec", latency)
             mlflow.log_text(prompt, "rag_prompt.txt")
             mlflow.log_text(answer, "rag_response.txt")
+
+        # 6. Journal XML médico-légal (HDS / RGPD)
+        try:
+            xml_path = export_execution_xml(
+                execution_id=f"rag_{int(time.time())}",
+                status="SUCCESS",
+                stage="rag_conversation",
+                metrics={"latency_sec": round(latency, 4), "results_count": len(results)},
+                details={"question": question[:120], "doc_id": doc_id or "all"}
+            )
+            logger.info(f"Journal XML RAG généré : {xml_path}")
+        except Exception as err_xml:
+            logger.warning(f"Impossible d'exporter le journal XML RAG : {err_xml}")
             
         return {"answer": answer, "context": [r[0] for r in results]}
 
     except Exception as e:
         try: conn.rollback()
         except: pass
-        print(f"Erreur RAG API: {e}")
+        logger.error(f"Erreur RAG API: {e}", exc_info=True)
+        try:
+            export_execution_xml(
+                execution_id=f"rag_err_{int(time.time())}",
+                status="ERROR",
+                stage="rag_conversation",
+                metrics={"latency_sec": round(time.time() - start_time, 4)},
+                details={"error": str(e), "question": question[:120]}
+            )
+        except:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cur is not None:
             try: cur.close()
             except: pass
+
+
+# ---------------------------------------------------------
+# 📊 ROUTES DE MONITORING ET AUDITABILITÉ (RNCP 41993 - BLOC 4)
+# ---------------------------------------------------------
+
+@app.get("/logs", response_class=PlainTextResponse)
+def get_logs(lines: int = 100):
+    """
+    Exposition des logs applicatifs récents (Stéphane Robert - Standard Python Logging).
+    Permet un diagnostic instantané en production sans accès SSH à la machine.
+    """
+    log_file = DEFAULT_LOG_FILE
+    if not os.path.exists(log_file):
+        return "Aucun fichier de log disponible."
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+            tail_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+            return "".join(tail_lines)
+    except Exception as e:
+        logger.error(f"Erreur lecture logs: {e}")
+        return f"Erreur lors de la lecture des logs : {e}"
+
+
+@app.get("/logs/xml")
+def get_latest_xml_log():
+    """
+    Récupère le dernier journal d'audit médico-légal au format XML.
+    Conforme aux exigences d'auditabilité HDS / RGPD pour la traçabilité des exécutions.
+    """
+    latest_xml = os.path.join(DEFAULT_XML_DIR, "latest_execution.xml")
+    if not os.path.exists(latest_xml):
+        raise HTTPException(status_code=404, detail="Aucun journal XML d'exécution disponible.")
+    return FileResponse(latest_xml, media_type="application/xml", filename="latest_execution.xml")
+
+
+@app.get("/monitoring/drift-report")
+def get_drift_report(force_regenerate: bool = False):
+    """
+    Accès au rapport visuel Evidently AI de détection de Data Drift (HTML).
+    Couplé à MLflow pour le suivi de dérive des données de production vs référence CHIA.
+    """
+    if force_regenerate or not os.path.exists(HTML_REPORT_PATH):
+        logger.info("Régénération à la volée du rapport de Drift Evidently AI...")
+        generate_drift_report()
+        
+    if not os.path.exists(HTML_REPORT_PATH):
+        raise HTTPException(status_code=404, detail="Rapport de drift HTML introuvable.")
+    return FileResponse(HTML_REPORT_PATH, media_type="text/html")

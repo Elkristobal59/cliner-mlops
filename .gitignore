@@ -19,11 +19,10 @@ models/
 data/*
 !data/chia_gold_standard.json
 !data/train_dataset.jsonl
-!data/test_dataset.jsonl
-!data/*.json
-!data/*.jsonl
 
 *.log
+logs/
+_scratch_scripts/
 *.lnk
 *.bat
 *.txt
