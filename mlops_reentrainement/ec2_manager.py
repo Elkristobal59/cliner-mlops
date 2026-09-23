@@ -113,7 +113,23 @@ class EC2GPUManager:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             key = paramiko.RSAKey.from_private_key_file(key_file)
-            ssh.connect(public_ip, username="ubuntu", pkey=key, timeout=30)
+
+            # Boucle d'attente (retry) que le démon sshd soit démarré après le boot de l'instance
+            connected = False
+            last_err = None
+            for attempt in range(1, 7):
+                try:
+                    ssh.connect(public_ip, username="ubuntu", pkey=key, timeout=15)
+                    connected = True
+                    break
+                except Exception as conn_err:
+                    last_err = conn_err
+                    print(f"⏳ [SSH Distant] Tentative {attempt}/6 : en attente du démarrage du service SSH (sshd)...")
+                    time.sleep(10)
+
+            if not connected:
+                raise last_err or Exception("Impossible d'établir la connexion SSH après 60s")
+
             print(f"🚀 [GPU AWS EC2] Lancement du calcul distant sur Tesla T4 : {command}")
             stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
             exit_code = stdout.channel.recv_exit_status()
