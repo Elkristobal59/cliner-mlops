@@ -803,7 +803,25 @@ with tab2:
         # Colonne lien cliquable vers la fiche officielle ClinicalTrials.gov
         df_sum["🔗 Fiche"] = "https://clinicaltrials.gov/study/" + df_sum["NCT_ID"].astype(str)
 
+        # Gestion de la version de l'éditeur pour forcer le rafraîchissement lors des actions de masse
+        if "_editor_version" not in st.session_state:
+            st.session_state._editor_version = 0
+
+        # Actions de sélection rapide (Tout cocher / Tout décocher)
+        all_ncts = df_sum["NCT_ID"].dropna().astype(str).tolist()
+        btn_col1, btn_col2, btn_spacer = st.columns([1.2, 1.2, 3])
+        if btn_col1.button("✅ Tout cocher", use_container_width=True):
+            st.session_state.selected_ncts = all_ncts
+            st.session_state._editor_version += 1
+            st.rerun()
+
+        if btn_col2.button("⬜ Tout décocher", use_container_width=True):
+            st.session_state.selected_ncts = []
+            st.session_state._editor_version += 1
+            st.rerun()
+
         st.caption("Coche les études à envoyer au modèle, puis clique « Analyser (GPU) ».")
+        editor_key = f"summary_editor_{st.session_state._editor_version}"
         edited = st.data_editor(
             df_sum, hide_index=True, use_container_width=True,
             column_config={
@@ -814,7 +832,7 @@ with tab2:
                     display_text="Ouvrir ↗"),
             },
             disabled=[c for c in df_sum.columns if c != "Analyser"],
-            key="summary_editor")
+            key=editor_key)
 
         selected_ncts = edited.loc[edited["Analyser"] == True, "NCT_ID"].tolist()
         st.session_state.selected_ncts = selected_ncts
