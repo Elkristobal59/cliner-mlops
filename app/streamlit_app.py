@@ -374,13 +374,24 @@ st.sidebar.metric(label="Hébergement Frontend", value="Render (Docker Web Servi
 st.sidebar.metric(label="Observabilité & Drift", value="MLflow (Google Cloud Run)")
 st.sidebar.markdown("[📊 **Ouvrir le Dashboard MLflow Cloud**](https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app/#/experiments/2)")
 st.sidebar.markdown("---")
-api_url = st.sidebar.text_input(
+api_url_raw = st.sidebar.text_input(
     "URL Backend Inférence (AWS EC2 / Lightning.ai / Local):",
     value=os.getenv("BACKEND_API_URL", os.getenv("LIGHTNING_AI_API_URL", "http://localhost:8000")),
     key="api_url_input")
-if st.session_state.api_url_input:
-    os.environ["BACKEND_API_URL"] = st.session_state.api_url_input
-    os.environ["LIGHTNING_AI_API_URL"] = st.session_state.api_url_input
+
+# Nettoyage automatique des erreurs de saisie (ex: http:/ au lieu de http://)
+api_url = api_url_raw.strip()
+if api_url.startswith("http:/") and not api_url.startswith("http://"):
+    api_url = "http://" + api_url[6:].lstrip("/")
+elif api_url.startswith("https:/") and not api_url.startswith("https://"):
+    api_url = "https://" + api_url[7:].lstrip("/")
+elif not api_url.startswith("http://") and not api_url.startswith("https://"):
+    api_url = f"http://{api_url}"
+api_url = api_url.rstrip("/")
+
+if api_url:
+    os.environ["BACKEND_API_URL"] = api_url
+    os.environ["LIGHTNING_AI_API_URL"] = api_url
 
 
 # --------------------------------------------------------------------------- #
