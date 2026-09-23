@@ -223,6 +223,33 @@ def orchestrate_mlops_pipeline(
                     mlflow.log_metric("train_loss_curve", l_val, step=step_idx)
                     mlflow.log_metric("f1_score_curve", f_val, step=step_idx)
 
+                # Enregistrement dans le Model Registry officiel de MLflow (Onglet 'Models')
+                try:
+                    from mlflow.tracking import MlflowClient
+                    client = MlflowClient()
+                    model_reg_name = "qwen-7b-chia-ner-lora"
+                    
+                    # Créer le modèle s'il n'existe pas encore dans le catalogue
+                    try:
+                        client.create_registered_model(model_reg_name, description="Adaptateur LoRA Qwen-7B spécialisé dans l'extraction NER biomédicale (CHIA).")
+                    except Exception:
+                        pass
+                    
+                    # Créer une nouvelle version pointant sur l'URI S3
+                    mv = client.create_model_version(
+                        name=model_reg_name,
+                        source=s3_res.get("s3_root_uri", "s3://cliner-mlops/models_lora/qwen-7b-chia-ner-v2/"),
+                        run_id=run.info.run_id,
+                        description=f"Version produite suite à un drift Wasserstein de {drift_res.get('wasserstein_distance', 0.0):.4f}"
+                    )
+                    try:
+                        client.set_registered_model_alias(name=model_reg_name, alias="champion", version=mv.version)
+                    except Exception:
+                        pass
+                    print(f"  ├── 🏷️ Model Registry MLflow : Modèle '{model_reg_name}' (Version {mv.version}) enregistré !")
+                except Exception as e_reg:
+                    print(f"  └── ℹ️ Enregistrement Model Registry : {e_reg}")
+
                 print(f"  ├── Expérience : CliNER_Continuous_Training_LoRA")
                 print(f"  ├── Run ID : {run.info.run_id}")
                 print(f"  └── Statut MLflow : RUN ENREGISTRÉ AVEC SUCCÈS ✅")
