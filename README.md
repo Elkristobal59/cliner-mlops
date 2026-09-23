@@ -65,6 +65,45 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 
 ## 🔄 La Cinématique Complète en Production (Les 2 Flux Détaillés)
 
+### 🗺️ Matrice d'Accès Données & Stockage : Qui Lit et Qui Écrit sur S3, Supabase et EC2 ?
+
+Pour l'oral de certification et la soutenance industrielle, voici la cartographie exacte des opérations de lecture et d'écriture entre les services Cloud :
+
+| Composant Cloud | Rôle Principal | FLOW 1 : Inférence Directe (Jour) | FLOW 2 : MLOps & Continuous Training (Nuit) |
+| :--- | :--- | :--- | :--- |
+| **AWS S3** (`cliner-mlops`) | **Data Lake & Artefacts** | **ÉCRITURE :** Téléchargement & archivage des PDFs bruts de protocoles (`raw_protocols/`).<br>**LECTURE :** Extraction du texte brut des PDFs pour le chunking RAG. | **ÉCRITURE :** Sauvegarde des 3 fichiers de l'adaptateur LoRA fine-tuné (~84 Mo dans `models_lora/`).<br>**LECTURE :** Pull de l'adaptateur par l'API pour mise à jour à chaud (*Zero-Downtime*). |
+| **Supabase** (PostgreSQL) | **Base Vectorielle & Cache Inférence** | **ÉCRITURE :** <br>1. Résultats JSON extraits par Qwen (table `clinical_ner_cache`).<br>2. Embeddings BioBERT 768d du protocole (colonne `embedding` pour contrôle qualité).<br>**LECTURE :** Recherche vectorielle cosinus `pgvector` (< 12 ms) et vérification du cache (0.01s). | **LECTURE :** Extraction des 100 derniers embeddings de protocoles ingérés pour calculer la distance de Wasserstein (détection du Drift).<br>*(Aucune écriture lourde pendant l'entraînement)*. |
+| **AWS EC2 GPU** (`g4dn.xlarge`, T4) | **Worker Éphémère (Calcul Pur)** | **INACTIF (Éteint) :** L'inférence courante tourne sur vLLM / CPU / Cache local (0,00 € dépensé sur EC2). | **WORKER ÉPHÉMÈRE :** Allumé par API `ec2:StartInstances` uniquement si drift > 0.08.<br>Exécute le QLoRA 4-bit (20 min), pousse les poids sur S3, puis s'éteint immédiatement (*Auto-Kill FinOps*). **Ne stocke aucune donnée persistante**. |
+| **MLflow** (Cloud Run) | **Gouvernance & Model Registry** | **ÉCRITURE (Log) :** Enregistre la latence d'inférence, le prompt et le statut d'extraction. | **ÉCRITURE (Log) :** Enregistre les métriques du run (Loss finale = 0.284, F1-Score CHIA = 58.3%), les hyperparamètres (r=16, alpha=32), et l'URI de l'artefact S3. |
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                        RÉCAPITULATIF DU PARCOURS DE LA DONNÉE (LECTURE / ÉCRITURE)                     │
+│                                                                                                        │
+│  [FLOW 1 : DIRECT JOUR]                                                                                │
+│  Médecin ──► API ──► S3 (Écriture PDF brut) ──► S3 (Lecture texte) ──► BioBERT + Qwen 7B               │
+│                                                                            │                           │
+│                                                                            ▼                           │
+│                                                      Supabase (Écriture JSON résultat + Embedding)     │
+│                                                                                                        │
+│  [FLOW 2 : MLOps NUIT]                                                                                 │
+│  CRON / GitHub Actions ──► Supabase (Lecture Embeddings) ──► Evidently AI (Distance de Wasserstein)   │
+│                                                                            │                           │
+│                                                               🚨 Si Drift > 0.08                       │
+│                                                                            │                           │
+│                                                                            ▼                           │
+│  AWS EC2 GPU (Allumage API -> Calcul LoRA 20 min) ──► AWS S3 (Écriture Adaptateur LoRA 84 Mo)          │
+│         │                                                    │                                         │
+│         ▼                                                    ▼                                         │
+│  AWS EC2 GPU (Auto-Kill FinOps : Stop immédiat)     MLflow (Écriture Run & URL S3)                     │
+│                                                              │                                         │
+│                                                              ▼                                         │
+│                                                     API Prod (Lecture S3 du nouvel adaptateur LoRA)    │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ### 🔹 Flux 1 : Le Parcours Utilisateur & Inférence Temps Réel (Le Praticien)
 1. **Recherche Rapide (CPU / 0,00 €)** : Le médecin cherche une maladie sur l'UI Streamlit. L'application interroge l'API ClinicalTrials.gov V2 en direct en une seule requête optimisée sans allumer aucun modèle IA (0.00 €).
 2. **Tableau Récapitulatif Dynamique (*Summary Table*) :**

@@ -95,8 +95,11 @@ class EmbeddingDriftDetector:
                 conn.close()
 
                 if len(ref_rows) >= 5 and len(curr_rows) >= self.min_new_samples:
-                    ref = np.array([r[0] for r in ref_rows], dtype=np.float32)
-                    curr = np.array([r[0] for r in curr_rows], dtype=np.float32)
+                    import json
+                    parse_vec = lambda x: json.loads(x) if isinstance(x, str) else x
+                    ref = np.array([parse_vec(r[0]) for r in ref_rows], dtype=np.float32)
+                    curr = np.array([parse_vec(r[0]) for r in curr_rows], dtype=np.float32)
+                    print(f"✅ [Supabase] Chargement réel réussi : {len(ref)} réfs, {len(curr)} récents.")
                     return ref, curr
             except Exception as e:
                 print(f"[WARN] Impossible de charger depuis Supabase ({e}). Utilisation du jeu de simulation contrôlé.")

@@ -1,10 +1,21 @@
 name: Weekly MLOps Drift & Retraining Pipeline
 
 on:
-  schedule:
-    # Exécution planifiée chaque lundi matin à 02h00 UTC
-    - cron: '0 2 * * 1'
-  workflow_dispatch: # Déclenchement manuel en un clic pour les démonstrations
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Mode d exécution (dry-run = simulation sécurisée sans GPU, live = vrai démarrage EC2)'
+        required: true
+        default: 'dry-run'
+        type: choice
+        options:
+          - dry-run
+          - live
+      threshold:
+        description: 'Seuil de Wasserstein pour le Drift (ex: 0.08 sensible, 0.15 standard)'
+        required: true
+        default: '0.08'
+        type: string
 
 jobs:
   weekly-mlops-job:
@@ -39,4 +50,10 @@ jobs:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
         run: |
-          python mlops_reentrainement/run_pipeline.py --dry-run --threshold 0.15
+          if [ "${{ github.event.inputs.mode }}" = "live" ]; then
+            echo "🚀 Lancement en mode LIVE (allumage EC2 GPU physique)..."
+            python mlops_reentrainement/run_pipeline.py --live --threshold ${{ github.event.inputs.threshold || '0.08' }}
+          else
+            echo "🧪 Lancement en mode DRY-RUN (simulation sécurisée FinOps)..."
+            python mlops_reentrainement/run_pipeline.py --dry-run --threshold ${{ github.event.inputs.threshold || '0.15' }}
+          fi
