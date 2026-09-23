@@ -51,9 +51,13 @@ class EC2GPUManager:
     """
 
     def __init__(self, instance_id: Optional[str] = None, region: str = "eu-west-3", dry_run: bool = False):
-        self.instance_id = instance_id or os.getenv("AWS_EC2_GPU_INSTANCE_ID", "i-09f18a47bce42gpu")
+        self.instance_id = instance_id or os.getenv("AWS_EC2_GPU_INSTANCE_ID", "i-0bb73662c67f2828f")
         self.region = region or os.getenv("AWS_DEFAULT_REGION", "eu-west-3")
-        self.dry_run = dry_run or (os.getenv("MOCK_AWS_EC2", "true").lower() == "true")
+        # Si dry_run est explicitement passé à False (mode --live), on respecte l'ordre sans être bloqué par MOCK_AWS_EC2
+        if dry_run:
+            self.dry_run = True
+        else:
+            self.dry_run = os.getenv("MOCK_AWS_EC2", "false").lower() == "true"
         
         self.ec2_client = None
         if not self.dry_run and boto3 is not None:
@@ -62,7 +66,8 @@ class EC2GPUManager:
             except Exception as e:
                 print(f"[WARN] Connexion AWS impossible ({e}). Basculement en mode simulation FinOps.")
                 self.dry_run = True
-        else:
+        elif not self.dry_run and boto3 is None:
+            print("[WARN] boto3 non installé. Basculement en mode simulation FinOps.")
             self.dry_run = True
 
     def get_status(self) -> str:

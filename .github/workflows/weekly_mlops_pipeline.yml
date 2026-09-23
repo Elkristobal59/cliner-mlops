@@ -34,21 +34,34 @@ jobs:
       - name: 📦 Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest flake8 numpy scipy boto3 mlflow
+          pip install pytest flake8 numpy scipy boto3 mlflow paramiko
 
       - name: 🧪 Run Automated PyTest Suite
         run: |
           pytest tests/ -v
+
+      - name: 🔑 Setup SSH Key
+        env:
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          if [ -n "$EC2_KEY" ]; then
+            echo "$EC2_KEY" > cliner-key.pem
+            chmod 600 cliner-key.pem
+            echo "✅ Clé SSH configurée."
+          else
+            echo "ℹ️ Aucune clé SSH fournie (exécution locale simulée ou via commandes internes)."
+          fi
 
       - name: 🚀 Run Continuous Training Orchestrator
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'eu-west-3' }}
-          AWS_EC2_GPU_INSTANCE_ID: ${{ secrets.AWS_EC2_GPU_INSTANCE_ID }}
+          AWS_EC2_GPU_INSTANCE_ID: ${{ secrets.AWS_EC2_GPU_INSTANCE_ID || 'i-0bb73662c67f2828f' }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME || 'cliner-mlops' }}
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          EC2_SSH_KEY_PATH: cliner-key.pem
         run: |
           if [ "${{ github.event.inputs.mode }}" = "live" ]; then
             echo "🚀 Lancement en mode LIVE (allumage EC2 GPU physique)..."
