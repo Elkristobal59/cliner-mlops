@@ -42,7 +42,7 @@ class TestMLOpsPipeline:
     # --------------------------------------------------------------------------
     def test_drift_detected_on_semantic_shift(self):
         """Vérifie que la distance de Wasserstein détecte correctement une anomalie sémantique."""
-        detector = EmbeddingDriftDetector(threshold=0.15)
+        detector = EmbeddingDriftDetector(threshold=0.08)
         ref_vecs = detector._generate_synthetic_baseline(n_samples=50, dim=768)
         drifted_vecs = detector._generate_synthetic_drifted(n_samples=5, dim=768, drift_magnitude=0.40)
         

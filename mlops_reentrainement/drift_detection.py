@@ -49,9 +49,9 @@ class EmbeddingDriftDetector:
     Détecteur de dérive sémantique sur embeddings médicaux (BioBERT 768 dimensions).
     """
 
-    def __init__(self, threshold: float = 0.15, min_new_samples: int = 5):
+    def __init__(self, threshold: float = 0.08, min_new_samples: int = 5):
         """
-        :param threshold: Seuil de distance statistique au-delà duquel un drift est déclaré.
+        :param threshold: Seuil de distance statistique au-delà duquel un drift est déclaré (0.08 par défaut).
         :param min_new_samples: Nombre minimal de nouveaux protocoles pour valider le test.
         """
         self.threshold = threshold
@@ -155,7 +155,7 @@ class EmbeddingDriftDetector:
         }
 
 
-def check_drift(threshold: float = 0.15, sample_size: int = 10) -> Dict[str, Any]:
+def check_drift(threshold: float = 0.08, sample_size: int = 10) -> Dict[str, Any]:
     """Point d'entrée programmatique appelé par l'orchestrateur (run_pipeline.py)."""
     detector = EmbeddingDriftDetector(threshold=threshold, min_new_samples=sample_size)
     ref, curr = detector.load_embeddings_from_supabase()
@@ -165,7 +165,7 @@ def check_drift(threshold: float = 0.15, sample_size: int = 10) -> Dict[str, Any
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Détection de Dérive Sémantique BioBERT")
-    parser.add_argument("--threshold", type=float, default=0.15, help="Seuil de dérive (défaut: 0.15)")
+    parser.add_argument("--threshold", type=float, default=0.08, help="Seuil de dérive (défaut: 0.08)")
     parser.add_argument("--sample-size", type=int, default=10, help="Nombre de nouveaux protocoles testés (défaut: 10)")
     args = parser.parse_args()
 

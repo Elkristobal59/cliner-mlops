@@ -55,7 +55,7 @@ logger = get_logger("cliner_pipeline")
 
 
 def orchestrate_mlops_pipeline(
-    threshold: float = 0.15,
+    threshold: float = 0.08,
     sample_size: int = 10,
     force_retrain: bool = False,
     dry_run: bool = False,
@@ -321,7 +321,7 @@ def orchestrate_mlops_pipeline(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Orchestrateur MLOps Global CliNER")
-    parser.add_argument("--threshold", type=float, default=0.15, help="Seuil de dérive statistique")
+    parser.add_argument("--threshold", type=float, default=0.08, help="Seuil de dérive statistique (défaut: 0.08)")
     parser.add_argument("--sample-size", type=int, default=10, help="Nombre de nouveaux protocoles analysés (défaut: 10)")
     parser.add_argument("--force-retrain", action="store_true", default=False, help="Force le réentraînement sans attendre de drift")
     parser.add_argument("--live", action="store_true", default=False, help="Exécuter sur l'infrastructure AWS réelle (FinOps)")

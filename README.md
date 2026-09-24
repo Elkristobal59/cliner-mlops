@@ -41,8 +41,8 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 │   │ 🚀 ORCHESTRATEUR CONTINUOUS TRAINING (run_pipeline.py & GitHub Actions)                         │         │
 │   │                                                                                         │         │
 │   │  1. Détection de Dérive Sémantique (Wasserstein Distance sur embeddings BioBERT)        │         │
-│   │     └── Si W <= 0.15 : Distribution stable -> GPU éteint (0.00 € dépensé)               │         │
-│   │     └── Si W > 0.15 : Dérive critique détectée -> Réveil de l'infrastructure GPU        │         │
+│   │     └── Si W <= 0.08 : Distribution stable -> GPU éteint (0.00 € dépensé)               │         │
+│   │     └── Si W > 0.08 : Dérive critique détectée -> Réveil de l'infrastructure GPU        │         │
 │   │                                                                                         │         │
 │   │  2. Just-In-Time Provisioning AWS EC2 GPU (boto3.ec2)                                   │         │
 │   │     └── ec2:StartInstances ('cliner-ec2-gpu' g4dn.xlarge, Nvidia T4 16 Go VRAM)        │         │
@@ -126,8 +126,8 @@ Pour l'oral de certification et la soutenance industrielle, voici la cartographi
 ### 🔹 Flux 2 : La Boucle MLOps de Réentraînement Automatisé (Continuous Training)
 1. **Surveillance de Dérive Sémantique (`drift_detection.py`)** :
    * Mesure la distance de Wasserstein ($W$) entre les embeddings BioBERT de référence (dataset Gold CHIA) et les 5 derniers protocoles cliniques ingérés.
-   * Si $W \le 0.15$ : distribution stable. L'orchestrateur s'arrête immédiatement. **Facture Cloud = 0.00 €**.
-   * Si $W > 0.15$ : dérive critique détectée $\rightarrow$ déclenchement du cycle de réentraînement.
+   * Si $W \le 0.08$ : distribution stable. L'orchestrateur s'arrête immédiatement. **Facture Cloud = 0.00 €**.
+   * Si $W > 0.08$ : dérive critique détectée $\rightarrow$ déclenchement du cycle de réentraînement.
    
    > 💡 **Précision d'Architecture MLOps — Pourquoi Wasserstein et non le F1-Score en production ?**  
    > * **Absence de Vérité Terrain en Direct (*Data Drift* non supervisé) :** Les nouveaux protocoles médicaux qui arrivent de l'hôpital ou de ClinicalTrials.gov sont du texte brut non annoté. Aucun médecin n'est présent pour labelliser chaque token en direct : il est donc **physiquement impossible de calculer un F1-Score en production**. Wasserstein mesure le *Covariate Shift* (dérive des textes d'entrée) dans l'espace BioBERT 768d.
@@ -461,7 +461,7 @@ Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal5
   4. **Construction des conteneurs Docker** (`cliner-frontend` et `cliner-mlops-worker`) et push automatique sur Docker Hub.
 * **`weekly_mlops_pipeline.yml` (Surveillance Hebdomadaire du Drift & Continuous Training)** :
   * Planifié chaque lundi à 02h00 UTC via cron GitHub Actions (**100% Free Tier, 0,00 € de coût de veille**).
-  * Exécute les tests PyTest, analyse la dérive de Wasserstein et le rapport Evidently AI sur la fenêtre glissante des 5 derniers protocoles, et lance le réentraînement LoRA si $W > 0.15$.
+  * Exécute les tests PyTest, analyse la dérive de Wasserstein et le rapport Evidently AI sur la fenêtre glissante des 5 derniers protocoles, et lance le réentraînement LoRA si $W > 0.08$.
 * **`deploy_ec2_autokill.yml` (Déploiement EC2 à la demande avec minuteur FinOps)** :
   * Déclenchable manuellement depuis l'onglet Actions avec sélection de la durée (15, 30, 45, 60 min).
   * Démarre l'instance GPU AWS, maintient la session active pendant les démonstrations, et exécute **l'Auto-Kill systématique** (`if: always()`).
@@ -475,7 +475,7 @@ Le projet CliNER-MLOps intègre une pile complète de monitoring et de gouvernan
 ### 1. Monitoring ML : Détection du Data Drift (Evidently AI & MLflow Tracking)
 * **Pourquoi la surveillance non supervisée du Data Drift ?** En environnement clinique hospitalier, les nouveaux protocoles reçus ne disposent d'aucune vérité terrain annotée en temps réel. Il est donc impossible de calculer une métrique supervisée (F1-score) en continu. La surveillance s'appuie sur la détection précoce du *Covariate Shift* (dérive des données d'entrée).
 * **Double niveau d'analyse statistique :**
-  1. **Niveau Macro-Sémantique (Wasserstein Distance)** : Calcul de la distance de Wasserstein (Earth Mover's Distance) sur les projections denses d'embeddings BioBERT (768 dimensions), avec seuil critique fixé à $W = 0.15$. C'est le **déclencheur FinOps binaire** du réentraînement automatisé sur EC2.
+  1. **Niveau Macro-Sémantique (Wasserstein Distance)** : Calcul de la distance de Wasserstein (Earth Mover's Distance) sur les projections denses d'embeddings BioBERT (768 dimensions), avec seuil critique fixé à $W = 0.08$. C'est le **déclencheur FinOps binaire** du réentraînement automatisé sur EC2.
   2. **Niveau Caractéristiques Textuelles (Evidently AI)** : Analyse de la dérive des distributions statistiques sur 5 métriques clés via tests de Kolmogorov-Smirnov (KS) à 2 échantillons (comparaison de fonctions de répartition cumulées, évitant les faux positifs dus aux fluctuations individuelles de texte) :
      - Longueur de texte en caractères (`char_count`) : contrôle de l'intégrité du découpage textuel.
      - Nombre de mots (`word_count`) : détection des textes tronqués ou des PDF non segmentés.
