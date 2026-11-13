@@ -61,7 +61,7 @@ def _extract_text_features(texts: list) -> pd.DataFrame:
 def generate_drift_report(
     reference_texts: Optional[list] = None,
     production_texts: Optional[list] = None,
-    drift_threshold: float = 0.15,
+    drift_threshold: float = 0.08,
     log_to_mlflow: bool = True
 ) -> Dict[str, Any]:
     """
@@ -69,12 +69,36 @@ def generate_drift_report(
     """
     # 1. Chargement des données par défaut si non fournies
     if reference_texts is None:
-        gold_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "chia_gold_standard.json"))
-        if os.path.exists(gold_path):
-            with open(gold_path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-                if isinstance(raw, list):
-                    reference_texts = [item.get("text", "") for item in raw[:50] if isinstance(item, dict)]
+        exemplar_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "chia_exemplar_pool.jsonl"))
+        if os.path.exists(exemplar_path):
+            with open(exemplar_path, "r", encoding="utf-8") as f:
+                loaded = []
+                for line in f:
+                    if len(loaded) >= 50:
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    item = json.loads(line)
+                    if isinstance(item, dict) and str(item.get("text", "")).strip():
+                        loaded.append(item["text"].strip())
+                reference_texts = loaded
+        if not reference_texts:
+            gold_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "chia_gold_standard.json"))
+            if os.path.exists(gold_path):
+                with open(gold_path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                    if isinstance(raw, list):
+                        loaded = []
+                        for item in raw[:50]:
+                            if not isinstance(item, dict):
+                                continue
+                            txt = str(item.get("text", "")).strip()
+                            if not txt and isinstance(item.get("entities"), list):
+                                txt = " ".join(str(e.get("text", "")).strip() for e in item["entities"] if isinstance(e, dict) and e.get("text"))
+                            if txt:
+                                loaded.append(txt)
+                        reference_texts = loaded
         if not reference_texts:
             reference_texts = [
                 "Inclusion: Adults with histologically confirmed Stage IV non-small cell lung cancer.",

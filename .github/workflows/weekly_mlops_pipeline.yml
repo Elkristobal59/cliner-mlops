@@ -34,7 +34,7 @@ jobs:
       - name: 📦 Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest flake8 numpy scipy boto3 mlflow paramiko
+          pip install pytest flake8 numpy scipy pandas boto3 mlflow paramiko
 
       - name: 🧪 Run Automated PyTest Suite
         run: |
@@ -68,5 +68,5 @@ jobs:
             python mlops_reentrainement/run_pipeline.py --live --threshold ${{ github.event.inputs.threshold || '0.08' }}
           else
             echo "🧪 Lancement en mode DRY-RUN (simulation sécurisée FinOps)..."
-            python mlops_reentrainement/run_pipeline.py --dry-run --threshold ${{ github.event.inputs.threshold || '0.15' }}
+            python mlops_reentrainement/run_pipeline.py --dry-run --threshold ${{ github.event.inputs.threshold || '0.08' }}
           fi

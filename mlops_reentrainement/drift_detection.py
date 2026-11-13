@@ -13,7 +13,7 @@ nouveaux protocoles non répertoriés est détecté, le script conclut à un dri
 nécessitant le déclenchement du réentraînement LoRA.
 
 Usage :
-    python drift_detection.py [--threshold 0.15] [--sample-size 5]
+    python drift_detection.py [--threshold 0.08] [--sample-size 10]
 """
 
 import os

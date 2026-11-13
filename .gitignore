@@ -34,6 +34,8 @@ audit_aws_*.py
 
 # Présentations & Slides (Local Only)
 *.pptx
+*.pdf
+FICHE_*
 
 # Fichiers Markdown (Local Only sauf README)
 *.md

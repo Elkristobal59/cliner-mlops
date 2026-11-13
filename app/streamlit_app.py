@@ -369,7 +369,7 @@ st.sidebar.metric(label="Moteurs (NER & RAG)", value="Qwen 2.5 7B LoRA + BioBERT
 st.sidebar.metric(label="Data Lake & Storage", value="AWS S3 (cliner-mlops)")
 st.sidebar.metric(label="Vector Store & Cache", value="Supabase pgvector (HNSW)")
 st.sidebar.metric(label="IaC & Provisioning", value="Terraform (<30s)")
-st.sidebar.metric(label="Quality Gate CI/CD", value="PyTest (9/9 validés) · GitHub Actions")
+st.sidebar.metric(label="Quality Gate CI/CD", value="PyTest (11/11 validés) · GitHub Actions")
 st.sidebar.metric(label="Hébergement Frontend", value="Render (Docker Web Service)")
 st.sidebar.metric(label="Observabilité & Drift", value="MLflow (Google Cloud Run)")
 st.sidebar.markdown("[📊 **Ouvrir le Dashboard MLflow Cloud**](https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app/#/experiments/2)")

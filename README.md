@@ -1,5 +1,6 @@
 # Clinical Protocols Standardization (AI-Powered) 🔬
-> **Système MLOps Hybride & Continuous Training (Data Engineering, Cloud Architecture & LLMOps)**
+> **Système MLOps Hybride & Continuous Training (Data Engineering, Cloud Architecture & LLMOps)**  
+> 🎓 **Certification Architecte IA (RNCP 41993 - Bloc 4) :** Voir la [Fiche de Révision Master Oral (PDF)](./02_PREPARATION_ORAL/FICHE_REVISION_MASTER_CLINER_MLOPS_ORAL.pdf) et sa version [Markdown](./02_PREPARATION_ORAL/FICHE_REVISION_MASTER_CLINER_MLOPS_ORAL.md).
 
 Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & Cloud Architecture) permettant l'ingestion, le découpage intelligent, l'indexation vectorielle, l'extraction chirurgicale d'entités cliniques (NER) depuis des protocoles médicaux volumineux (PDF), ainsi que le monitoring et le réentraînement automatisé en boucle fermée.
 
@@ -56,7 +57,7 @@ Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & 
 │   │     └── Log paramètres, loss et dérive vers MLflow Cloud Run (HTTPS direct)             │         │
 │   │                                                                                         │         │
 │   │  5. 🛑 PROTECTION FINOPS AUTO-KILL SYSTÉMATIQUE (bloc finally:)                         │         │
-│   │     └── ec2:StopInstances immédiat -> Facturation GPU arrêtée (Coût = 0.39 $ la session)│         │
+│   │     └── ec2:StopInstances immédiat -> Facturation GPU arrêtée (Coût = 0.18 $ la session)│         │
 │   └─────────────────────────────────────────────────────────────────────────────────────────┘         │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -72,7 +73,7 @@ Pour l'oral de certification et la soutenance industrielle, voici la cartographi
 | Composant Cloud | Rôle Principal | FLOW 1 : Inférence Directe (Jour) | FLOW 2 : MLOps & Continuous Training (Nuit) |
 | :--- | :--- | :--- | :--- |
 | **AWS S3** (`cliner-mlops`) | **Data Lake & Artefacts** | **ÉCRITURE :** Téléchargement & archivage des PDFs bruts de protocoles (`raw_protocols/`).<br>**LECTURE :** Extraction du texte brut des PDFs pour le chunking RAG. | **ÉCRITURE :** Sauvegarde des 3 fichiers de l'adaptateur LoRA fine-tuné (~84 Mo dans `models_lora/`).<br>**LECTURE :** Pull de l'adaptateur par l'API pour mise à jour à chaud (*Zero-Downtime*). |
-| **Supabase** (PostgreSQL) | **Base Vectorielle & Cache Inférence** | **ÉCRITURE :** <br>1. Résultats JSON extraits par Qwen (table `clinical_ner_cache`).<br>2. Embeddings BioBERT 768d du protocole (colonne `embedding` pour contrôle qualité).<br>**LECTURE :** Recherche vectorielle cosinus `pgvector` (< 12 ms) et vérification du cache (0.01s). | **LECTURE :** Extraction des 100 derniers embeddings de protocoles ingérés pour calculer la distance de Wasserstein (détection du Drift).<br>*(Aucune écriture lourde pendant l'entraînement)*. |
+| **Supabase** (PostgreSQL) | **Base Vectorielle & Cache Inférence** | **ÉCRITURE :** <br>1. Résultats JSON extraits par Qwen (table `clinical_ner_cache`).<br>2. Embeddings BioBERT 768d du protocole (colonne `embedding` pour contrôle qualité).<br>**LECTURE :** Recherche vectorielle cosinus `pgvector` (< 12 ms) et vérification du cache (0.01s). | **LECTURE :** Extraction des 100 embeddings de référence et des `N` derniers protocoles (`--sample-size`, défaut `10` / CI `5`) pour calculer la distance de Wasserstein (détection du Drift).<br>*(Aucune écriture lourde pendant l'entraînement)*. |
 | **AWS EC2 GPU** (`g4dn.xlarge`, T4) | **Worker Éphémère (Calcul Pur)** | **INACTIF (Éteint) :** L'inférence courante tourne sur vLLM / CPU / Cache local (0,00 € dépensé sur EC2). | **WORKER ÉPHÉMÈRE :** Allumé par API `ec2:StartInstances` uniquement si drift > 0.08.<br>Exécute le QLoRA 4-bit (20 min), pousse les poids sur S3, puis s'éteint immédiatement (*Auto-Kill FinOps*). **Ne stocke aucune donnée persistante**. |
 | **MLflow** (Cloud Run) | **Gouvernance & Model Registry** | **ÉCRITURE (Log) :** Enregistre la latence d'inférence, le prompt et le statut d'extraction. | **ÉCRITURE (Log) :** Enregistre les métriques du run (Loss finale = 0.284, F1-Score CHIA = 58.3%), les hyperparamètres (r=16, alpha=32), et l'URI de l'artefact S3. |
 
@@ -112,7 +113,7 @@ Pour l'oral de certification et la soutenance industrielle, voici la cartographi
    * **Archivage Data Lake S3 (vs Ancien Stockage Supabase) :** Dans les versions initiales, chaque ligne de résumé était persistée dans une table relationnelle Supabase. Pour éviter cette surcharge transactionnelle et adopter un modèle Data Lakehouse propre, les tables récapitulatives sont désormais exportées et archivées directement sur **AWS S3** (`s3://cliner-mlops/summary_tables/`) au format CSV/Parquet pour l'analytique et l'audit, libérant Supabase pour ses deux rôles à forte valeur ajoutée : la recherche vectorielle `pgvector` et le cache d'inférence `clinical_ner_cache`.
 3. **Double Voie d'Ingestion (JSON Officiel API v2 vs Archivage PDF S3)** :
    * **Voie Principale (Majorité des cas - JSON Natif)** : La majorité des études cliniques est directement ingérée sous le format standardisé officiel **ClinicalTrials.gov JSON Schema v2** (structure hiérarchique `Study` découpée en `protocolSection`, notamment les modules `eligibilityModule` avec `eligibilityCriteria`, `identificationModule`, `conditionsModule` et `designModule`). Le texte clinique propre est extrait, normalisé et concaténé instantanément sans nécessiter d'OCR ni de parsing PDF lourd.
-   * **Voie Secondaire (Protocoles Complets / Upload Manuel - PDF)** : Lorsqu'un protocole intégral scanné de 50 pages est sélectionné ou uploadé par le médecin, il est sauvegardé et versionné dans le Data Lake AWS S3 (`s3://cliner-mlops/clinical_pdfs/`).
+   * **Voie Secondaire (Fallback PDF automatique — API `/process_pdf`)** : Lorsque le JSON ClinicalTrials ne contient pas de texte d'éligibilité exploitable (ou via soumission directe à `POST /process_pdf`), le PDF officiel est téléchargé, parsé en flux mémoire et archivé dans le Data Lake AWS S3 (`s3://cliner-mlops/clinical_pdfs/`).
 4. **Le Documentaliste (BioBERT Retriever - Modèle Encodeur Spécialisé)** :
    * **Nature du modèle (Encoder-only) :** BioBERT est un modèle spécialisé pré-entraîné sur des millions d'articles biomédicaux (PubMed, PMC). Il n'est **ni conversationnel ni génératif** : il est strictement incapable de dialoguer, de rédiger du texte ou de formater du JSON.
    * **Mission d'indexation géométrique :** Son unique tâche consiste à lire et convertir la sémantique de chaque paragraphe (issu du JSON ou du PDF) en un vecteur mathématique dense de **768 dimensions**. Il agit comme un pur "archiviste documentaliste" ultra-rapide (tournant sur CPU), chargé de cartographier l'information avant recherche.
@@ -125,7 +126,7 @@ Pour l'oral de certification et la soutenance industrielle, voici la cartographi
 
 ### 🔹 Flux 2 : La Boucle MLOps de Réentraînement Automatisé (Continuous Training)
 1. **Surveillance de Dérive Sémantique (`drift_detection.py`)** :
-   * Mesure la distance de Wasserstein ($W$) entre les embeddings BioBERT de référence (dataset Gold CHIA) et les 5 derniers protocoles cliniques ingérés.
+   * Mesure la distance de Wasserstein ($W$) entre les embeddings BioBERT de référence (dataset Gold CHIA) et les derniers protocoles cliniques ingérés (`--sample-size`, défaut `10` / CI hebdo `5`).
    * Si $W \le 0.08$ : distribution stable. L'orchestrateur s'arrête immédiatement. **Facture Cloud = 0.00 €**.
    * Si $W > 0.08$ : dérive critique détectée $\rightarrow$ déclenchement du cycle de réentraînement.
    
@@ -146,7 +147,7 @@ Pour l'oral de certification et la soutenance industrielle, voici la cartographi
 5. **🛑 Protection FinOps Auto-Kill Systématique** :
    * Dans le bloc `finally:` de Python (et le step `if: always()` de GitHub Actions), l'orchestrateur exécute immédiatement `ec2:StopInstances`.
    * L'instance GPU repasse à l'état `stopped`. Facturation GPU immédiatement stoppée.
-   * **Coût total de la session d'entraînement : ~0.39 $** (couvert par les 140 $ de crédits gratuits AWS).
+   * **Coût total de la session d'entraînement : ~0,18 $** (`0,56 $/h × 20 min` sur `g4dn.xlarge`, couvert par les crédits AWS).
 
 ---
 
@@ -243,7 +244,7 @@ Une force majeure de l'architecture est la mutualisation de l'index vectoriel Su
 │                                       │                     │                                    │
 │                 ┌─────────────────────┘                     └─────────────────────┐              │
 │                 ▼                                                                 ▼              │
-│   🏷️ ONGLET 3 : EXTRACTION STRUCTURÉE (NER)                         💬 ONGLET 4 : CHATBOT RAG    │
+│   🏷️ ONGLET 2/3 : SUMMARY TABLE & VISUALISATION NER                   💬 ONGLET 4 : CHATBOT RAG    │
 │   • Pattern : Retrieval-Augmented NER                               • Pattern : Conversational   │
 │   • Modèle : Qwen-7B LoRA (Elkristobal59/qwen-7b-chia-ner)          • Modèle : Qwen-7B Base      │
 │   • Objectif : Filtrer 98% du document pour isoler les 5 chunks     • Objectif : Poser une       │
@@ -252,7 +253,7 @@ Une force majeure de l'architecture est la mutualisation de l'index vectoriel Su
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Onglet 3 (Extraction NER) — Le Retrieval-Augmented NER :**
+1. **Onglets 2 & 3 (Summary Table & Visualisation NER) — Le Retrieval-Augmented NER :**
    * **Pourquoi le NER intervient après la recherche vectorielle et non juste après l'embedding ?**  
      Un protocole de 50 pages compte environ 80 chunks. Si le NER était appliqué sur chaque chunk, le GPU exécuterait 80 inférences séquentielles (**plus de 4 minutes d'attente pour le médecin !**) et traiterait inutilement des pages administratives ou légales. En effectuant la recherche sémantique en amont (12 ms), Qwen LoRA n'analyse que les **5 chunks pertinents**, ramenant le temps d'extraction à **3 secondes chrono avec zéro hallucination**.
    * **Format de sortie :** Tableau JSON médical strict (`Condition`, `Drug`, `Procedure`, `Measurement`, `Value`).
@@ -266,7 +267,7 @@ Une force majeure de l'architecture est la mutualisation de l'index vectoriel Su
 ## 📦 Données & Modèles : Cartographie et Stockage Décentralisé
 
 ### 1. Le Dataset Clinique de Référence (Gold CHIA dans `data/`)
-Le dossier local [data/](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/data) contient l'ensemble des données d'entraînement et d'évaluation certifiées :
+Le dossier local [data/](data/) contient l'ensemble des données d'entraînement et d'évaluation certifiées :
 * **`data/chia_gold_standard.json` (866 Ko)** : La vérité terrain (*Gold Standard*) de 800 protocoles cliniques annotés à la main par des experts médicaux (entités CHIA : `Condition`, `Drug`, `Procedure`, `Measurement`, etc.).
 * **`data/chia_finetuning_dataset.jsonl` (455 Ko)** & **`train_dataset.jsonl` (898 Ko)** : Jeux d'entraînement structurés sous forme de paires `prompt -> json attendu` pour le fine-tuning LoRA.
 * **`data/test_dataset.jsonl` (859 Ko)** : Jeu de test indépendant utilisé par `finetune_lora.py` pour valider la convergence de la Loss sans data leakage.
@@ -280,7 +281,7 @@ Afin de respecter les principes FinOps et GreenOps de l'Architecte IA, les poids
 | :--- | :--- | :--- | :---: | :--- |
 | **BioBERT** | [Hugging Face Hub](https://huggingface.co/dmis-lab/biobert-v1.1) (`dmis-lab/biobert-v1.1`) | Cache local Hugging Face (`~/.cache/huggingface/hub/`) | **~400 Mo** | Bi-Encoder pur sur CPU (Embeddings 768d pour `pgvector`) |
 | **Qwen2.5-7B Base** | [Hugging Face Hub](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) (`Qwen/Qwen2.5-7B-Instruct`) | Cache local ou VRAM GPU (chargé par `vLLM` ou `transformers`) | **~15 Go** | Modèle de fondation gelé (*Frozen Backbone*) |
-| **Qwen LoRA (Votre modèle)** | 1. [Hugging Face Hub](https://huggingface.co/Elkristobal59/qwen-7b-chia-ner)<br>2. **AWS S3** (`s3://cliner-mlops/models_lora/`) | Dossier local du repo :<br>[models/qwen_7b_lora_retrained/](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/models/qwen_7b_lora_retrained) | **~84 Mo** | Adaptateur médical entraîné sur CHIA ($r=16, \alpha=32$) |
+| **Qwen LoRA (Votre modèle)** | 1. [Hugging Face Hub](https://huggingface.co/Elkristobal59/qwen-7b-chia-ner)<br>2. **AWS S3** (`s3://cliner-mlops/models_lora/`) | Dossier local du repo :<br>[models/qwen_7b_lora_retrained/](models/qwen_7b_lora_retrained/) | **~84 Mo** | Adaptateur médical entraîné sur CHIA ($r=16, \alpha=32$) |
 
 > 💡 **Le Ratio FinOps Clé :** Lors d'un réentraînement automatique, nous ne transférons ni ne sauvegardons les **15 Go** du modèle complet. Seuls les **84 Mo** de l'adaptateur LoRA sont produits, versionnés sur AWS S3 et référencés dans MLflow.
 
@@ -305,14 +306,13 @@ L'API Backend FastAPI (`api/main.py`) embarque nativement le moteur d'inférence
 
 ---
 
-## 🏛️ Infrastructure as Code (IaC) : Terraform pour Supabase & pgvector
+## 🏛️ Infrastructure as Code (IaC) : Terraform (Supabase, AWS S3 & EC2 GPU)
 
-Le dossier [terraform/](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/terraform) matérialise l'approche industrielle DevSecOps en provisionnant l'infrastructure de données de manière déclarative et reproductible :
+Le dossier [terraform/](terraform/) matérialise l'approche industrielle DevSecOps en provisionnant les 3 piliers d'infrastructure de manière déclarative et reproductible :
 
 * **Fichiers de configuration :**
-  * [`terraform/main.tf`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/terraform/main.tf) : Déclaration du provider `postgresql` connecté à Supabase en SSL strict (`sslmode=require`).
-  * Activation déclarative de l'extension `vector` (`resource "postgresql_extension" "pgvector"`).
-  * [`terraform/schema.sql`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/terraform/schema.sql) : Création automatisée de la table d'ingestion vectorielle `clinical_trials_data_biobert` (colonne `embedding vector(768)`) et de la table de cache d'inférence `clinical_ner_cache`.
+  * [`terraform/main.tf`](terraform/main.tf) : Provisionne les providers `postgresql` et `aws` (`eu-west-3`), active `pgvector` et applique [`terraform/schema.sql`](terraform/schema.sql) (tables `clinical_trials_data_biobert` HNSW + `clinical_ner_cache`), crée le bucket Data Lake & Registry S3 (`cliner-mlops`, versionné et chiffré AES-256), ainsi que le Security Group (`cliner-mlops-gpu-sg`, port `8000`) et l'instance EC2 GPU `g4dn.xlarge` (`cliner-mlops-gpu-t4-worker`).
+  * [`terraform/variables.tf`](terraform/variables.tf) & [`terraform/outputs.tf`](terraform/outputs.tf) : Paramétrage région, bucket S3 (`cliner-mlops`), AMI/type EC2 et export des identifiants générés.
 * **Commandes de déploiement IaC :**
   ```powershell
   cd terraform
@@ -325,7 +325,7 @@ Le dossier [terraform/](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/terraform
 
 ## 🔐 Configuration des Identifiants & Fichier `.env`
 
-Le fichier local [`.env`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/.env) (sécurisé dans `.gitignore`) centralise les accès de production :
+Le fichier local [`.env`](.env.example) (gabarit versionné dans `.env.example`, `.env` réel exclu par `.gitignore`) centralise les accès de production :
 
 ```env
 # ==============================================================================
@@ -407,7 +407,7 @@ python mlops_reentrainement/s3_storage.py
 ```
 
 ### 3. Exécuter la Suite de Tests Automatisés (PyTest - Quality Gate CI/CD)
-Valide l'intégrité logicielle, la cohérence des formats et l'absence de régression (9 tests unitaires & intégration) :
+Valide l'intégrité logicielle, la cohérence des formats et l'absence de régression (**11 tests** unitaires & d'intégration) :
 ```powershell
 pytest tests/ -v
 ```
@@ -416,7 +416,7 @@ pytest tests/ -v
 ```powershell
 uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-* **Documentation Swagger interactive** : [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) (Endpoints `/predict`, `/feedback`, `/drift`).
+* **Documentation Swagger interactive** : [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) (Endpoints `/health`, `/process_text`, `/process_pdf`, `/chat_rag`, `/logs`, `/logs/xml`, `/monitoring/drift-report`).
 
 ### 5. Consulter le Dashboard MLflow en Direct dans le Cloud
 Le serveur est accessible en direct à l'adresse officielle :  
@@ -431,7 +431,7 @@ streamlit run app/streamlit_app.py
 * **Application Web Locale** : Accessible sur [`http://localhost:8501`](http://localhost:8501).
 
 #### B. Déploiement Cloud sur Render (Web Service Docker)
-L'interface client est entièrement dockerisée via [`Dockerfile`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/Dockerfile) et [`requirements-frontend.txt`](file:///d:/AIL-FT-02/CERTIF%20AIL/cliner-mlops/requirements-frontend.txt) (sans dépendances GPU lourdes pour un démarrage ultra-rapide) :
+L'interface client est entièrement dockerisée via [`Dockerfile`](Dockerfile) et [`requirements-frontend.txt`](requirements-frontend.txt) (sans dépendances GPU lourdes pour un démarrage ultra-rapide) :
 1. **Créer un Web Service** sur Render connecté au dépôt GitHub `Elkristobal59/cliner-mlops`.
 2. **Configuration du runtime** : Choisir l'environnement **Docker** (détecte automatiquement le `Dockerfile` à la racine).
 3. **Variables d'environnement indispensables sur Render** :

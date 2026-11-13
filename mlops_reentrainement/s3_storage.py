@@ -46,7 +46,7 @@ class S3StorageManager:
         region_name: Optional[str] = None,
         dry_run: bool = False
     ):
-        self.bucket_name = bucket_name or os.environ.get("S3_BUCKET_NAME", "cliner-clinical-storage-dev")
+        self.bucket_name = bucket_name or os.environ.get("S3_BUCKET_NAME", "cliner-mlops")
         self.region_name = region_name or os.environ.get("AWS_DEFAULT_REGION", "eu-west-3")
         self.dry_run = dry_run
         self.s3_client = None
