@@ -1,6 +1,6 @@
 # Clinical Protocols Standardization (AI-Powered) 🔬
 > **Système MLOps Hybride & Continuous Training (Data Engineering, Cloud Architecture & LLMOps)**  
-> 🎓 **Certification Architecte IA (RNCP 41993 - Bloc 4) :** Voir la [Fiche de Révision Master Oral (PDF)](./02_PREPARATION_ORAL/FICHE_REVISION_MASTER_CLINER_MLOPS_ORAL.pdf) et sa version [Markdown](./02_PREPARATION_ORAL/FICHE_REVISION_MASTER_CLINER_MLOPS_ORAL.md).
+> 🎓 **Certification Architecte IA (RNCP 41993 - Bloc 4) 
 
 Ce projet est une plateforme industrielle complète (Data Engineering, LLMOps & Cloud Architecture) permettant l'ingestion, le découpage intelligent, l'indexation vectorielle, l'extraction chirurgicale d'entités cliniques (NER) depuis des protocoles médicaux volumineux (PDF), ainsi que le monitoring et le réentraînement automatisé en boucle fermée.
 
