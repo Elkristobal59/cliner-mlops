@@ -101,7 +101,7 @@ def orchestrate_mlops_pipeline(
         evidently_res = generate_drift_report()
         pipeline_report["evidently_report"] = evidently_res
         pipeline_report["steps_completed"].append("evidently_report_generated")
-        print(f"  └── Rapport Evidently généré : {evidently_res.get('html_report')}")
+        print(f"  └── Rapport Evidently généré : {evidently_res.get('html_path')}")
     except Exception as err_ev:
         logger.warning(f"Erreur génération rapport Evidently : {err_ev}")
         print(f"  └── ⚠️ Rapport Evidently ignoré ({err_ev})")
@@ -223,6 +223,21 @@ def orchestrate_mlops_pipeline(
                     mlflow.log_metric("train_loss_curve", l_val, step=step_idx)
                     mlflow.log_metric("f1_score_curve", f_val, step=step_idx)
 
+                # Upload du rapport Evidently AI (HTML + JSON) dans S3 et MLflow Artifacts
+                ev_rep = pipeline_report.get("evidently_report") or {}
+                if ev_rep.get("html_path") and os.path.exists(ev_rep["html_path"]):
+                    try:
+                        s3.upload_file(ev_rep["html_path"], "mlflow_artifacts/evidently/data_drift_report.html")
+                        mlflow.log_artifact(ev_rep["html_path"], artifact_path="evidently_monitoring")
+                    except Exception:
+                        pass
+                if ev_rep.get("json_path") and os.path.exists(ev_rep["json_path"]):
+                    try:
+                        s3.upload_file(ev_rep["json_path"], "mlflow_artifacts/evidently/data_drift_report.json")
+                        mlflow.log_artifact(ev_rep["json_path"], artifact_path="evidently_monitoring")
+                    except Exception:
+                        pass
+
                 # Enregistrement dans le Model Registry officiel de MLflow (Onglet 'Models')
                 try:
                     from mlflow.tracking import MlflowClient
@@ -321,13 +336,13 @@ def orchestrate_mlops_pipeline(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Orchestrateur MLOps Global CliNER")
-    parser.add_argument("--threshold", type=float, default=0.08, help="Seuil de dérive statistique (défaut: 0.08)")
-    parser.add_argument("--sample-size", type=int, default=10, help="Nombre de nouveaux protocoles analysés (défaut: 10)")
-    parser.add_argument("--force-retrain", action="store_true", default=False, help="Force le réentraînement sans attendre de drift")
-    parser.add_argument("--live", action="store_true", default=False, help="Exécuter sur l'infrastructure AWS réelle (FinOps)")
-    parser.add_argument("--dry-run", action="store_true", default=False, help="Forcer le mode simulation")
-    parser.add_argument("--instance-id", type=str, default=None, help="ID d'instance AWS EC2 optionnel")
-    parser.add_argument("--keep-alive", action="store_true", default=False, help="Garde l'instance EC2 allumée après le pipeline pour les démos")
+    parser.add_argument("--threshold", "-threshold", type=float, default=0.08, help="Seuil de dérive statistique (défaut: 0.08)")
+    parser.add_argument("--sample-size", "-sample-size", type=int, default=10, help="Nombre de nouveaux protocoles analysés (défaut: 10)")
+    parser.add_argument("--force-retrain", "-force-retrain", action="store_true", default=False, help="Force le réentraînement sans attendre de drift")
+    parser.add_argument("--live", "-live", action="store_true", default=False, help="Exécuter sur l'infrastructure AWS réelle (FinOps)")
+    parser.add_argument("--dry-run", "-dry-run", action="store_true", default=False, help="Forcer le mode simulation")
+    parser.add_argument("--instance-id", "-instance-id", type=str, default=None, help="ID d'instance AWS EC2 optionnel")
+    parser.add_argument("--keep-alive", "-keep-alive", action="store_true", default=False, help="Garde l'instance EC2 allumée après le pipeline pour les démos")
     args = parser.parse_args()
 
     # Détermination du mode dry_run

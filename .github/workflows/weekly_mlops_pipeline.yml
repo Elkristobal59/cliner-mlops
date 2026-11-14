@@ -34,7 +34,7 @@ jobs:
       - name: 📦 Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest flake8 numpy scipy pandas boto3 mlflow paramiko
+          pip install pytest flake8 numpy scipy pandas boto3 mlflow paramiko evidently python-dotenv
 
       - name: 🧪 Run Automated PyTest Suite
         run: |
@@ -70,3 +70,13 @@ jobs:
             echo "🧪 Lancement en mode DRY-RUN (simulation sécurisée FinOps)..."
             python mlops_reentrainement/run_pipeline.py --dry-run --threshold ${{ github.event.inputs.threshold || '0.08' }}
           fi
+
+      - name: 📊 Upload Official Evidently AI Drift Report (Cloud Artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidently-ai-drift-report
+          path: |
+            reports/data_drift_report.html
+            reports/data_drift_report.json
+          if-no-files-found: ignore
