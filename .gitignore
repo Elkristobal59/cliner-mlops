@@ -28,6 +28,7 @@ _scratch_scripts/
 *.txt
 !requirements*.txt
 !requirements_*.txt
+!LIENS_GITHUB_ET_DEMO.txt
 _scripts/
 scripts/
 audit_aws_*.py

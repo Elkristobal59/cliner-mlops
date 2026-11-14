@@ -1,0 +1,28 @@
+# Secrets & local configs (never bake into Docker images)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*accessKeys.csv
+
+# Git & dev artifacts
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+_scratch_scripts/
+02_PREPARATION_ORAL/
+workspace/
+logs/
+
+# Heavy local weights, archives & docs not needed for the Streamlit container
+models/
+data/
+*.zip
+*.pptx
+*.pdf
+*.db
+mlruns/
+.terraform/
+

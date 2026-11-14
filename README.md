@@ -73,7 +73,7 @@ Pour l'oral de certification et la soutenance industrielle, voici la cartographi
 | Composant Cloud | Rôle Principal | FLOW 1 : Inférence Directe (Jour) | FLOW 2 : MLOps & Continuous Training (Nuit) |
 | :--- | :--- | :--- | :--- |
 | **AWS S3** (`cliner-mlops`) | **Data Lake & Artefacts** | **ÉCRITURE :** Téléchargement & archivage des PDFs bruts de protocoles (`raw_protocols/`).<br>**LECTURE :** Extraction du texte brut des PDFs pour le chunking RAG. | **ÉCRITURE :** Sauvegarde des 3 fichiers de l'adaptateur LoRA fine-tuné (~84 Mo dans `models_lora/`).<br>**LECTURE :** Pull de l'adaptateur par l'API pour mise à jour à chaud (*Zero-Downtime*). |
-| **Supabase** (PostgreSQL) | **Base Vectorielle & Cache Inférence** | **ÉCRITURE :** <br>1. Résultats JSON extraits par Qwen (table `clinical_ner_cache`).<br>2. Embeddings BioBERT 768d du protocole (colonne `embedding` pour contrôle qualité).<br>**LECTURE :** Recherche vectorielle cosinus `pgvector` (< 12 ms) et vérification du cache (0.01s). | **LECTURE :** Extraction des 100 embeddings de référence et des `N` derniers protocoles (`--sample-size`, défaut `10` / CI `5`) pour calculer la distance de Wasserstein (détection du Drift).<br>*(Aucune écriture lourde pendant l'entraînement)*. |
+| **Supabase** (PostgreSQL) | **Base Vectorielle & Cache Inférence** | **ÉCRITURE :** <br>1. Résultats JSON extraits par Qwen (table `clinical_ner_cache`).<br>2. Embeddings BioBERT 768d du protocole (colonne `embedding` pour contrôle qualité).<br>**LECTURE :** Recherche vectorielle cosinus `pgvector` (< 12 ms) et vérification du cache (0.01s). | **LECTURE :** Extraction des 100 embeddings de référence et des `N` derniers protocoles (`--sample-size`, défaut `10`) pour calculer la distance de Wasserstein (détection du Drift).<br>*(Aucune écriture lourde pendant l'entraînement)*. |
 | **AWS EC2 GPU** (`g4dn.xlarge`, T4) | **Worker Éphémère (Calcul Pur)** | **INACTIF (Éteint) :** L'inférence courante tourne sur vLLM / CPU / Cache local (0,00 € dépensé sur EC2). | **WORKER ÉPHÉMÈRE :** Allumé par API `ec2:StartInstances` uniquement si drift > 0.08.<br>Exécute le QLoRA 4-bit (20 min), pousse les poids sur S3, puis s'éteint immédiatement (*Auto-Kill FinOps*). **Ne stocke aucune donnée persistante**. |
 | **MLflow** (Cloud Run) | **Gouvernance & Model Registry** | **ÉCRITURE (Log) :** Enregistre la latence d'inférence, le prompt et le statut d'extraction. | **ÉCRITURE (Log) :** Enregistre les métriques du run (Loss finale = 0.284, F1-Score CHIA = 58.3%), les hyperparamètres (r=16, alpha=32), et l'URI de l'artefact S3. |
 
@@ -87,8 +87,8 @@ Pour l'oral de certification et la soutenance industrielle, voici la cartographi
 │                                                                            ▼                           │
 │                                                      Supabase (Écriture JSON résultat + Embedding)     │
 │                                                                                                        │
-│  [FLOW 2 : MLOps NUIT]                                                                                 │
-│  CRON / GitHub Actions ──► Supabase (Lecture Embeddings) ──► Evidently AI (Distance de Wasserstein)   │
+│  [FLOW 2 : MLOps CONTINUOUS TRAINING]                                                                  │
+│  GitHub Actions (dispatch) ──► Supabase (Lecture Embeddings) ──► Evidently AI (Distance Wasserstein)   │
 │                                                                            │                           │
 │                                                               🚨 Si Drift > 0.08                       │
 │                                                                            │                           │
@@ -126,14 +126,14 @@ Pour l'oral de certification et la soutenance industrielle, voici la cartographi
 
 ### 🔹 Flux 2 : La Boucle MLOps de Réentraînement Automatisé (Continuous Training)
 1. **Surveillance de Dérive Sémantique (`drift_detection.py`)** :
-   * Mesure la distance de Wasserstein ($W$) entre les embeddings BioBERT de référence (dataset Gold CHIA) et les derniers protocoles cliniques ingérés (`--sample-size`, défaut `10` / CI hebdo `5`).
+   * Mesure la distance de Wasserstein ($W$) entre les embeddings BioBERT de référence (dataset Gold CHIA) et les derniers protocoles cliniques ingérés (`--sample-size`, défaut `10`).
    * Si $W \le 0.08$ : distribution stable. L'orchestrateur s'arrête immédiatement. **Facture Cloud = 0.00 €**.
    * Si $W > 0.08$ : dérive critique détectée $\rightarrow$ déclenchement du cycle de réentraînement.
    
    > 💡 **Précision d'Architecture MLOps — Pourquoi Wasserstein et non le F1-Score en production ?**  
    > * **Absence de Vérité Terrain en Direct (*Data Drift* non supervisé) :** Les nouveaux protocoles médicaux qui arrivent de l'hôpital ou de ClinicalTrials.gov sont du texte brut non annoté. Aucun médecin n'est présent pour labelliser chaque token en direct : il est donc **physiquement impossible de calculer un F1-Score en production**. Wasserstein mesure le *Covariate Shift* (dérive des textes d'entrée) dans l'espace BioBERT 768d.
-   > * **Pourquoi 58.3% de F1-Score sur CHIA est un score de référence ?** CHIA est une tâche extrême de NER imbriqué multi-classes (15 catégories médicales strictes : `Condition`, `Drug`, `Procedure`, `Measurement`, `Temporal`, etc.) avec alignement exact de caractères (*exact boundary match*). L'accord inter-annotateurs entre médecins experts tourne autour de **65% à 70%**. Un score F1 strict de **58% à 60%** pour un LLM 7B est un standard très élevé dans la littérature scientifique biomédicale.
-   > * **Qui bouge lors du fine-tuning ?** Le Gold Standard CHIA reste **immuable** (étalon zéro) ; le Data Lake S3 s'enrichit des nouveaux cas validés ; et **seul l'adaptateur LoRA (84 Mo)** est réentraîné sur AWS EC2 pour repositionner ses projections neuronales sans provoquer d'oubli catastrophique.
+   > * **Pourquoi 58.3% de F1-Score sur CHIA est un score de référence ?** CHIA est une tâche extrême de NER imbriqué multi-classes (15 catégories médicales brutes dans le corpus CHIA, filtrées sur **9 classes cliniques cibles** : `Condition`, `Value`, `Drug`, `Procedure`, `Measurement`, `Temporal`, `Observation`, `Person`, `Device`) avec alignement exact de caractères (*exact boundary match*). L'accord inter-annotateurs entre médecins experts tourne autour de **65% à 70%**. Un score F1 strict de **58% à 60%** pour un LLM 7B est un standard très élevé dans la littérature scientifique biomédicale.
+   > * **Qui bouge lors du fine-tuning ?** Le Gold Standard CHIA reste **immuable** (étalon zéro) ; le Data Lake S3 s'enrichit des nouveaux cas validés ; et **seul l'adaptateur LoRA (~38,5 Mo en FP16 `.safetensors` / ~84 Mo avec checkpoint/tokenizer complet)** est réentraîné sur AWS EC2 pour repositionner ses projections neuronales sans provoquer d'oubli catastrophique.
 2. **Allumage FinOps à la Demande (`ec2_manager.py`)** :
    * L'orchestrateur appelle l'API AWS `ec2:StartInstances` via `boto3`.
    * L'instance GPU `cliner-ec2-gpu` (`g4dn.xlarge`, Nvidia T4) démarre en ~45 secondes.
@@ -451,19 +451,19 @@ L'application intègre une détection dynamique multi-environnements. La barre l
 
 ## ⚙️ Intégration Continue & Déploiement (GitHub Actions CI/CD)
 
-Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal59/cliner-mlops) intègre trois workflows automatisés configurés avec 7 secrets de production :
+Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal59/cliner-mlops) intègre trois workflows automatisés :
 
-* **Secrets GitHub configurés :** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (`eu-west-3`), `S3_BUCKET_NAME` (`cliner-mlops`), `MLFLOW_TRACKING_URI`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
-* **`ci_mlops.yml` (Quality Gate à chaque push)** :
-  1. Linting strict Flake8 (détection des erreurs de syntaxe et imports manquants).
+* **Secrets GitHub utilisés par les workflows :** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (`eu-west-3`), `S3_BUCKET_NAME` (`cliner-mlops`), `AWS_EC2_GPU_INSTANCE_ID`, `EC2_SSH_KEY`, `SUPABASE_DATABASE_URL`, `MLFLOW_TRACKING_URI`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
+* **`ci_mlops.yml` (Quality Gate à chaque push/PR sur `main` ou `master`, et `workflow_dispatch`) :**
+  1. Linting strict `flake8` (`E9,F63,F7,F821`).
   2. **Suite de Tests Automatisés PyTest (`pytest tests/ -v`)** : 11 tests unitaires et d'intégration validant le calcul de drift Wasserstein, Evidently AI (génération des rapports HTML/JSON de Data Drift), la traçabilité XML médico-légale (HDS/RGPD), le cycle de vie EC2 FinOps, le fine-tuning LoRA, le connecteur S3 et l'intégrité des datasets CHIA.
-  3. **Simulation du cycle Continuous Training LoRA** avec enregistrement direct sur MLflow Cloud Run.
-  4. **Construction des conteneurs Docker** (`cliner-frontend` et `cliner-mlops-worker`) et push automatique sur Docker Hub.
-* **`weekly_mlops_pipeline.yml` (Surveillance Hebdomadaire du Drift & Continuous Training)** :
-  * Planifié chaque lundi à 02h00 UTC via cron GitHub Actions (**100% Free Tier, 0,00 € de coût de veille**).
-  * Exécute les tests PyTest, analyse la dérive de Wasserstein et le rapport Evidently AI sur la fenêtre glissante des 5 derniers protocoles, et lance le réentraînement LoRA si $W > 0.08$.
-* **`deploy_ec2_autokill.yml` (Déploiement EC2 à la demande avec minuteur FinOps)** :
-  * Déclenchable manuellement depuis l'onglet Actions avec sélection de la durée (15, 30, 45, 60 min).
+  3. **Simulation du cycle Continuous Training LoRA** (`python mlops_reentrainement/run_pipeline.py --dry-run --force-retrain`) avec enregistrement sur MLflow Cloud Run.
+  4. **Construction des conteneurs Docker** (`cliner-frontend:latest` et `cliner-mlops-worker:latest`) et push vers Docker Hub (si `DOCKERHUB_USERNAME` et `DOCKERHUB_TOKEN` sont configurés).
+* **`weekly_mlops_pipeline.yml` (Audit Drift & Continuous Training à la demande) :**
+  * Déclenchable via `workflow_dispatch` avec sélection du mode (`dry-run` sécurisé FinOps ou `live` avec réveil EC2 physique via SSH) et du seuil (`threshold`, défaut `'0.08'`).
+  * Exécute les 11 tests PyTest, analyse la dérive de Wasserstein (`sample_size=10` par défaut) et le rapport Evidently AI, et lance le réentraînement LoRA si $W \ge 0.08$.
+* **`deploy_ec2_autokill.yml` (Déploiement EC2 à la demande avec minuteur FinOps) :**
+  * Déclenchable manuellement depuis l'onglet Actions avec sélection de la durée (`15`, `30`, `45`, `60` min).
   * Démarre l'instance GPU AWS, maintient la session active pendant les démonstrations, et exécute **l'Auto-Kill systématique** (`if: always()`).
 
 ---
