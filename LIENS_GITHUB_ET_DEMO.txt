@@ -8,7 +8,7 @@ Projet : CliNER-MLOps (Clinical NER RAG BioBERT + Qwen2.5-7B QLoRA + Drift Wasse
 - Lien GitHub des workflows CI/CD GitHub Actions :
   https://github.com/Elkristobal59/cliner-mlops/actions
 
-- Lien GitHub du dépôt global RNCP 41993 (4 Blocs & slides de soutenance) :
+- Lien GitHub du support de présentation (dépôt RNCP 41993) :
   https://github.com/Elkristobal59/CERTIFICATION_AIA/tree/main/04_BLOC_4_MLOPS_CLINER
 
 - Application Web Streamlit en production (Render) :
@@ -16,4 +16,3 @@ Projet : CliNER-MLOps (Clinical NER RAG BioBERT + Qwen2.5-7B QLoRA + Drift Wasse
 
 - Serveur MLflow & Model Registry (Google Cloud Run) :
   https://mlflow-cliner-mlops-1054740171053.europe-west9.run.app
-

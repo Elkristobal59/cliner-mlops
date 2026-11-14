@@ -407,7 +407,7 @@ python mlops_reentrainement/s3_storage.py
 ```
 
 ### 3. Exécuter la Suite de Tests Automatisés (PyTest - Quality Gate CI/CD)
-Valide l'intégrité logicielle, la cohérence des formats et l'absence de régression (**11 tests** unitaires & d'intégration) :
+Valide l'intégrité logicielle, la cohérence des formats et l'absence de régression (**5 tests** unitaires & d'intégration) :
 ```powershell
 pytest tests/ -v
 ```
@@ -456,12 +456,12 @@ Le dépôt GitHub [`Elkristobal59/cliner-mlops`](https://github.com/Elkristobal5
 * **Secrets GitHub utilisés par les workflows :** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (`eu-west-3`), `S3_BUCKET_NAME` (`cliner-mlops`), `AWS_EC2_GPU_INSTANCE_ID`, `EC2_SSH_KEY`, `SUPABASE_DATABASE_URL`, `MLFLOW_TRACKING_URI`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
 * **`ci_mlops.yml` (Quality Gate à chaque push/PR sur `main` ou `master`, et `workflow_dispatch`) :**
   1. Linting strict `flake8` (`E9,F63,F7,F821`).
-  2. **Suite de Tests Automatisés PyTest (`pytest tests/ -v`)** : 11 tests unitaires et d'intégration validant le calcul de drift Wasserstein, Evidently AI (génération des rapports HTML/JSON de Data Drift), la traçabilité XML médico-légale (HDS/RGPD), le cycle de vie EC2 FinOps, le fine-tuning LoRA, le connecteur S3 et l'intégrité des datasets CHIA.
+  2. **Suite de Tests Automatisés PyTest (`pytest tests/ -v`)** : 5 tests unitaires et d'intégration validant le calcul de drift Wasserstein, Evidently AI (génération des rapports HTML/JSON de Data Drift), la traçabilité XML médico-légale (HDS/RGPD), le cycle de vie EC2 FinOps, le fine-tuning LoRA, le connecteur S3 et l'intégrité des datasets CHIA.
   3. **Simulation du cycle Continuous Training LoRA** (`python mlops_reentrainement/run_pipeline.py --dry-run --force-retrain`) avec enregistrement sur MLflow Cloud Run.
   4. **Construction des conteneurs Docker** (`cliner-frontend:latest` et `cliner-mlops-worker:latest`) et push vers Docker Hub (si `DOCKERHUB_USERNAME` et `DOCKERHUB_TOKEN` sont configurés).
 * **`weekly_mlops_pipeline.yml` (Audit Drift & Continuous Training à la demande) :**
   * Déclenchable via `workflow_dispatch` avec sélection du mode (`dry-run` sécurisé FinOps ou `live` avec réveil EC2 physique via SSH) et du seuil (`threshold`, défaut `'0.08'`).
-  * Exécute les 11 tests PyTest, analyse la dérive de Wasserstein (`sample_size=10` par défaut) et le rapport Evidently AI, et lance le réentraînement LoRA si $W \ge 0.08$.
+  * Exécute les 5 tests PyTest, analyse la dérive de Wasserstein (`sample_size=10` par défaut) et le rapport Evidently AI, et lance le réentraînement LoRA si $W \ge 0.08$.
 * **`deploy_ec2_autokill.yml` (Déploiement EC2 à la demande avec minuteur FinOps) :**
   * Déclenchable manuellement depuis l'onglet Actions avec sélection de la durée (`15`, `30`, `45`, `60` min).
   * Démarre l'instance GPU AWS, maintient la session active pendant les démonstrations, et exécute **l'Auto-Kill systématique** (`if: always()`).
