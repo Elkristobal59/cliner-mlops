@@ -412,11 +412,28 @@ Valide l'intégrité logicielle, la cohérence des formats et l'absence de régr
 pytest tests/ -v
 ```
 
-### 4. Lancer l'API Backend FastAPI
+### 4. Lancer & Utiliser l'API Backend FastAPI (`api/main.py`)
 ```powershell
 uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-* **Documentation Swagger interactive** : [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) (Endpoints `/health`, `/process_text`, `/process_pdf`, `/chat_rag`, `/logs`, `/logs/xml`, `/monitoring/drift-report`).
+* **Documentation Swagger interactive** : [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs)
+
+| Méthode | Route | Paramètres d'entrée | Description & Réponse JSON |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/health` | — | État API, GPU CUDA/CPU, `vllm_enabled`, statut Supabase |
+| `POST` | `/process_text` | `disease`, `document_id`, `text_content` (Form) | Cache SQL (0,01 s) sinon RAG BioBERT Top-5 + Qwen LoRA (`{"status", "disease", "document", "extraction"}`) |
+| `POST` | `/process_pdf` | `file` (PDF), `disease` (Form) | Lecture PyMuPDF en mémoire + archivage Supabase Storage + extraction NER JSON |
+| `POST` | `/chat_rag` | `question`, opt. `doc_id` / `doc_ids` (Form) | Chatbot RAG médical FR sur Top-15 extraits (`{"answer", "context"}`) |
+| `GET` | `/logs` | Query opt. `lines=100` | Retourne les dernières lignes de logs rotatifs (`text/plain`) |
+| `GET` | `/logs/xml` | — | Télécharge `latest_execution.xml` (journal d'audit HDS/RGPD) |
+| `GET` | `/monitoring/drift-report` | Query opt. `force_regenerate=false` | Dashboard HTML Evidently AI (tests KS sur 5 métriques textuelles) |
+
+```bash
+# Exemple rapide : extraction NER depuis texte brut
+curl -X POST "http://127.0.0.1:8000/process_text" \
+  -F "disease=Melanoma" -F "document_id=NCT02421835" \
+  -F "text_content=Patients aged >= 18 receiving dabrafenib 150 mg BID."
+```
 
 ### 5. Consulter le Dashboard MLflow en Direct dans le Cloud
 Le serveur est accessible en direct à l'adresse officielle :  
