@@ -362,13 +362,17 @@ Text: {context}"""
                 except Exception:
                     pass
         
-        with mlflow.start_run():
-            mlflow.log_param("disease", disease)
-            mlflow.log_param("document", filename)
-            mlflow.log_param("model", "Elkristobal59/qwen-7b-chia-ner")
-            mlflow.log_metric("latency_sec", latency)
-            mlflow.log_text(prompt, "prompt.txt")
-            mlflow.log_text(response_json, "ner_response_raw.json")
+        try:
+            mlflow.set_experiment("Clinical_Trials_Extraction")
+            with mlflow.start_run():
+                mlflow.log_param("disease", disease)
+                mlflow.log_param("document", filename)
+                mlflow.log_param("model", "Elkristobal59/qwen-7b-chia-ner")
+                mlflow.log_metric("latency_sec", latency)
+                mlflow.log_text(prompt, "prompt.txt")
+                mlflow.log_text(response_json, "ner_response_raw.json")
+        except Exception as err_mlflow:
+            logger.warning(f"Tracking MLflow NER non bloquant ({err_mlflow})")
 
         # Journal XML médico-légal (HDS / RGPD)
         try:
@@ -602,15 +606,19 @@ RÉPONSE:"""
         
         latency = time.time() - start_time
         
-        # 5. Monitoring MLflow
-        with mlflow.start_run():
-            mlflow.log_param("task", "chat_rag")
-            mlflow.log_param("doc_id", doc_id)
-            mlflow.log_param("doc_ids", doc_ids)
-            mlflow.log_param("question", question)
-            mlflow.log_metric("latency_sec", latency)
-            mlflow.log_text(prompt, "rag_prompt.txt")
-            mlflow.log_text(answer, "rag_response.txt")
+        # 5. Monitoring MLflow (Tolérant au Scale-to-Zero Cloud Run)
+        try:
+            mlflow.set_experiment("Clinical_Trials_Extraction")
+            with mlflow.start_run():
+                mlflow.log_param("task", "chat_rag")
+                mlflow.log_param("doc_id", doc_id)
+                mlflow.log_param("doc_ids", doc_ids)
+                mlflow.log_param("question", question)
+                mlflow.log_metric("latency_sec", latency)
+                mlflow.log_text(prompt, "rag_prompt.txt")
+                mlflow.log_text(answer, "rag_response.txt")
+        except Exception as err_mlflow:
+            logger.warning(f"Tracking MLflow RAG non bloquant ({err_mlflow})")
 
         # 6. Journal XML médico-légal (HDS / RGPD)
         try:
@@ -654,6 +662,16 @@ RÉPONSE:"""
 # ---------------------------------------------------------
 # 📊 ROUTES DE MONITORING ET AUDITABILITÉ (RNCP 41993 - BLOC 4)
 # ---------------------------------------------------------
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok",
+        "device": str(device),
+        "vllm_enabled": is_vllm,
+        "supabase_connected": conn is not None
+    }
+
 
 @app.get("/logs", response_class=PlainTextResponse)
 def get_logs(lines: int = 100):
