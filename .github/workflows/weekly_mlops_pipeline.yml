@@ -34,7 +34,7 @@ jobs:
       - name: 📦 Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest flake8 numpy scipy pandas boto3 mlflow paramiko evidently python-dotenv
+          pip install pytest flake8 numpy scipy pandas boto3 mlflow paramiko evidently python-dotenv psycopg2-binary
 
       - name: 🧪 Run Automated PyTest Suite
         run: |
