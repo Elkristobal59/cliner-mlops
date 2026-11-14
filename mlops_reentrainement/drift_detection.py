@@ -30,6 +30,12 @@ if sys.platform == "win32":
 import numpy as np
 from typing import Dict, Any, Tuple
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Optionnel : scipy pour les tests statistiques rigoureux
 try:
     from scipy.stats import wasserstein_distance, ks_2samp
